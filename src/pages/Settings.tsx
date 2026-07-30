@@ -1,7 +1,7 @@
 import { useState } from "react";
 import PageHeader from "../components/PageHeader";
 import { useEffect } from "react";
-import { getLatestRelease } from "../lib/updateBridge";
+import { applyPortableUpdate, checkPortableUpdate } from "../lib/updateBridge";
 import pkg from "../../package.json";
 
 const AUTO_LOCK_OPTIONS = ["1 minute", "5 minutes", "15 minutes", "Never"];
@@ -22,24 +22,57 @@ export default function Settings({ onLock }: SettingsProps) {
       return false;
     }
   });
+  const [updateStatus, setUpdateStatus] = useState<string>("Idle");
+  const [updating, setUpdating] = useState(false);
+  const [lastCheckedAt, setLastCheckedAt] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem("lastUpdateCheckAt");
+    } catch {
+      return null;
+    }
+  });
+
+  function recordLastChecked() {
+    const now = new Date().toISOString();
+    setLastCheckedAt(now);
+    try {
+      localStorage.setItem("lastUpdateCheckAt", now);
+    } catch {}
+  }
+
+  async function runPortableUpdateCheck() {
+    setUpdating(true);
+    recordLastChecked();
+    try {
+      setUpdateStatus("Checking for updates...");
+      const info = await checkPortableUpdate();
+      if (!info.hasUpdate) {
+        setUpdateStatus(`Up to date (${pkg.version})`);
+        return;
+      }
+
+      if (!info.assetDownloadUrl) {
+        setUpdateStatus(
+          `Update found (${info.latestVersion}) but no Windows EXE asset was found in the latest release.`
+        );
+        return;
+      }
+
+      setUpdateStatus(`Downloading update ${info.latestVersion}...`);
+      await applyPortableUpdate(info.assetDownloadUrl);
+      setUpdateStatus("Applying update and restarting...");
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Update check failed.";
+      setUpdateStatus(`Update failed: ${message}`);
+      console.debug("update check failed", e);
+    } finally {
+      setUpdating(false);
+    }
+  }
 
   useEffect(() => {
     if (!autoUpdate) return;
-    (async () => {
-      try {
-        const rel = await getLatestRelease();
-        const latestTag = rel.tag_name as string;
-        const current = pkg.version;
-        if (latestTag && latestTag !== current) {
-          // automatically open release page when auto-update is enabled
-          const url = rel.html_url as string;
-          if (url) window.open(url, "_blank");
-        }
-      } catch (e) {
-        // ignore errors silently
-        console.debug("update check failed", e);
-      }
-    })();
+    runPortableUpdateCheck();
   }, [autoUpdate]);
 
   return (
@@ -110,7 +143,7 @@ export default function Settings({ onLock }: SettingsProps) {
             <div className="flex items-center justify-between">
               <div>
                 <div className="font-semibold text-ink">Auto-check for updates</div>
-                <div className="text-sm text-slate-600">When enabled, Lockbox will check GitHub releases and open the release page automatically.</div>
+                <div className="text-sm text-slate-600">When enabled, Lockbox checks GitHub releases and applies portable Windows EXE updates automatically.</div>
               </div>
               <button
                 type="button"
@@ -126,6 +159,18 @@ export default function Settings({ onLock }: SettingsProps) {
                 {autoUpdate ? "On" : "Off"}
               </button>
             </div>
+            <button
+              type="button"
+              onClick={runPortableUpdateCheck}
+              disabled={updating}
+              className="neo-btn mt-3 w-full bg-neo-blue py-3 text-white"
+            >
+              {updating ? "Checking…" : "Update now"}
+            </button>
+            <p className="mt-3 text-sm text-slate-700">Status: {updateStatus}</p>
+            <p className="mt-1 text-xs text-slate-600">
+              Last checked: {lastCheckedAt ? new Date(lastCheckedAt).toLocaleString() : "Never"}
+            </p>
           </div>
 
           <div className="mt-6 border-t-2 pt-4">

@@ -43,6 +43,8 @@ pub fn run() {
             commands::delete_vault_entry,
             commands::uninstall_app,
             updates::get_latest_release,
+            updates::check_portable_update,
+            updates::apply_portable_update,
             cloud_commands::save_cloud_config,
             cloud_commands::load_cloud_config,
             cloud_commands::sync_vault_now,

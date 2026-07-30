@@ -231,4 +231,6 @@ npm run version:update -- 0.1.1
 
 ## License
 
-No license file is included in this repository snapshot. Add one before distributing the project.
+Lockbox is licensed under the [Apache License 2.0](LICENSE).
+
+That means you can use, modify, and redistribute the project under the terms of the license, including its patent grant and NOTICE requirements. Third-party dependencies and bundled app assets keep their own upstream licenses.

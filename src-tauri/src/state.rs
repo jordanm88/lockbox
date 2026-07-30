@@ -1,5 +1,5 @@
 use crate::crypto::VaultKey;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
 
@@ -13,6 +13,13 @@ pub struct AppState {
     /// True while an `rclone sync` is running, so a second click can't start
     /// a second sync against the same Vault directory concurrently.
     pub sync_in_progress: Mutex<bool>,
+    /// In-progress chunked uploads, keyed by a random session id. Bytes only
+    /// land here in memory — nothing touches the vault until `finish_upload`
+    /// completes, so a crash or abandoned upload never leaves a partial file.
+    pub uploads: Mutex<HashMap<String, Vec<u8>>>,
+    /// Decrypted file contents staged for chunked download, keyed by a
+    /// random session id, freed once the frontend calls `end_download`.
+    pub downloads: Mutex<HashMap<String, Vec<u8>>>,
 }
 
 /// Locks `mutex`, recovering from poisoning instead of propagating it.

@@ -28,6 +28,16 @@ struct VaultIndex {
 
 const INDEX_RELATIVE_PATH: &str = ".lockbox/vault.index.enc";
 const DATA_RELATIVE_PATH: &str = ".lockbox/data";
+/// Generous cap on a single chunked transfer's total size — mainly a guard
+/// against a runaway frontend loop growing an in-memory buffer without
+/// bound, same spirit as the app-store installer's download cap.
+const MAX_TRANSFER_BYTES: usize = 8 * 1024 * 1024 * 1024;
+
+fn random_session_id() -> String {
+    let mut bytes = [0u8; 16];
+    OsRng.fill_bytes(&mut bytes);
+    hex::encode(bytes)
+}
 
 #[tauri::command]
 pub fn unlock_vault(state: State<AppState>, passphrase: String) -> Result<bool, String> {
@@ -59,24 +69,23 @@ pub fn vault_exists(state: State<AppState>) -> Result<bool, String> {
     Ok(meta_path.exists())
 }
 
-#[tauri::command]
-pub fn encrypt_and_save_file(
-    state: State<AppState>,
+/// Shared by the chunked upload path below. Takes fully-assembled plaintext
+/// bytes and does the actual encrypt + index update.
+fn save_encrypted_file(
+    vault_dir: &Path,
+    key: &crypto::VaultKey,
+    relative_dest: &str,
     file_bytes: Vec<u8>,
-    relative_dest: String,
 ) -> Result<String, String> {
-    let guard = lock_recover(&state.vault_key);
-    let key = guard.as_ref().ok_or("vault is locked")?;
-
-    let normalized_dest = normalize_relative_path(&relative_dest)?;
-    let vault_dir = usb_root::vault_dir(&state.root);
-    let mut index = load_or_upgrade_index(&vault_dir, key)?;
+    let normalized_dest = normalize_relative_path(relative_dest)?;
+    let mut index = load_or_upgrade_index(vault_dir, key)?;
 
     let saved_relative = unique_original_path(&index, &normalized_dest);
     ensure_parent_directories(&mut index, &saved_relative);
 
-    let data_dir = ensure_data_dir(&vault_dir)?;
+    let data_dir = ensure_data_dir(vault_dir)?;
     let blob_name = unique_blob_name(&data_dir)?;
+    let file_len = file_bytes.len() as u64;
     let sealed = crypto::encrypt_bytes(key, &file_bytes)?;
     fs::write(data_dir.join(&blob_name), sealed)
         .map_err(|e| format!("failed to write file: {e}"))?;
@@ -85,11 +94,72 @@ pub fn encrypt_and_save_file(
         original_path: saved_relative.clone(),
         blob_name: Some(blob_name),
         is_dir: false,
-        size: Some(file_bytes.len() as u64),
+        size: Some(file_len),
     });
 
-    save_index(&vault_dir, key, &index)?;
+    save_index(vault_dir, key, &index)?;
     Ok(saved_relative)
+}
+
+// --- Chunked upload -------------------------------------------------------
+//
+// Sending a large file to the backend as one giant `Vec<u8>` IPC argument
+// means the frontend has to build one huge JS array and JSON-serialize it in
+// a single synchronous pass, which is exactly what was freezing the UI on
+// large files. These three commands let the frontend stream a file across in
+// small pieces instead: each `append_upload_chunk` call is small and fast,
+// and the `await` between them gives the UI thread room to breathe. Nothing
+// touches the vault until `finish_upload` — a crash or abandoned upload just
+// leaves an in-memory buffer that vanishes with the process, never a partial
+// file on disk.
+
+#[tauri::command]
+pub fn begin_upload(state: State<AppState>) -> Result<String, String> {
+    let id = random_session_id();
+    lock_recover(&state.uploads).insert(id.clone(), Vec::new());
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn append_upload_chunk(
+    state: State<AppState>,
+    upload_id: String,
+    chunk: Vec<u8>,
+) -> Result<(), String> {
+    let mut uploads = lock_recover(&state.uploads);
+    let buffer = uploads
+        .get_mut(&upload_id)
+        .ok_or("unknown upload session")?;
+
+    if buffer.len() + chunk.len() > MAX_TRANSFER_BYTES {
+        uploads.remove(&upload_id);
+        return Err("upload exceeds the maximum allowed size".to_string());
+    }
+
+    buffer.extend_from_slice(&chunk);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn cancel_upload(state: State<AppState>, upload_id: String) -> Result<(), String> {
+    lock_recover(&state.uploads).remove(&upload_id);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn finish_upload(
+    state: State<AppState>,
+    upload_id: String,
+    relative_dest: String,
+) -> Result<String, String> {
+    let file_bytes = lock_recover(&state.uploads)
+        .remove(&upload_id)
+        .ok_or("unknown upload session")?;
+
+    let guard = lock_recover(&state.vault_key);
+    let key = guard.as_ref().ok_or("vault is locked")?;
+    let vault_dir = usb_root::vault_dir(&state.root);
+    save_encrypted_file(&vault_dir, key, &relative_dest, file_bytes)
 }
 
 fn unique_original_path(index: &VaultIndex, requested: &str) -> String {
@@ -374,19 +444,16 @@ fn normalize_relative_path(path: &str) -> Result<String, String> {
     Ok(components.join("/"))
 }
 
-#[tauri::command]
-pub fn read_and_decrypt_file(
-    state: State<AppState>,
-    relative_path: String,
+/// Shared by the chunked download path below. Loads and fully decrypts one
+/// vault entry, returning plaintext bytes in memory.
+fn read_decrypted_file(
+    vault_dir: &Path,
+    key: &crypto::VaultKey,
+    relative_path: &str,
 ) -> Result<Vec<u8>, String> {
-    let guard = lock_recover(&state.vault_key);
-    let key = guard.as_ref().ok_or("vault is locked")?;
-
-    let vault_dir = usb_root::vault_dir(&state.root);
-    let index = load_or_upgrade_index(&vault_dir, key)?;
-    let normalized = normalize_relative_path(&relative_path)?;
-    let entry = get_entry_for_path(&index, &normalized)
-        .ok_or("file not found")?;
+    let index = load_or_upgrade_index(vault_dir, key)?;
+    let normalized = normalize_relative_path(relative_path)?;
+    let entry = get_entry_for_path(&index, &normalized).ok_or("file not found")?;
     if entry.is_dir {
         return Err("path is a directory".to_string());
     }
@@ -395,9 +462,72 @@ pub fn read_and_decrypt_file(
         .as_ref()
         .ok_or("missing blob mapping for file")?;
 
-    let sealed = fs::read(data_dir(&vault_dir).join(blob_name))
+    let sealed = fs::read(data_dir(vault_dir).join(blob_name))
         .map_err(|e| format!("failed to read encrypted file: {e}"))?;
     crypto::decrypt_bytes(key, &sealed)
+}
+
+// --- Chunked download -------------------------------------------------------
+//
+// The read-side mirror of the chunked upload above: returning one giant
+// `Vec<u8>` in a single command response means the frontend has to
+// JSON-parse one huge array in one synchronous pass — same freeze, just in
+// the opposite direction (hit when previewing a large file). `begin_download`
+// decrypts once into memory and hands back a handle; the frontend then pulls
+// it out in small pieces via `read_download_chunk`.
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadHandle {
+    download_id: String,
+    total_bytes: u64,
+}
+
+#[tauri::command]
+pub fn begin_download(
+    state: State<AppState>,
+    relative_path: String,
+) -> Result<DownloadHandle, String> {
+    let plaintext = {
+        let guard = lock_recover(&state.vault_key);
+        let key = guard.as_ref().ok_or("vault is locked")?;
+        let vault_dir = usb_root::vault_dir(&state.root);
+        read_decrypted_file(&vault_dir, key, &relative_path)?
+    };
+
+    let total_bytes = plaintext.len() as u64;
+    let id = random_session_id();
+    lock_recover(&state.downloads).insert(id.clone(), plaintext);
+    Ok(DownloadHandle {
+        download_id: id,
+        total_bytes,
+    })
+}
+
+#[tauri::command]
+pub fn read_download_chunk(
+    state: State<AppState>,
+    download_id: String,
+    offset: u64,
+    length: u64,
+) -> Result<Vec<u8>, String> {
+    let downloads = lock_recover(&state.downloads);
+    let buffer = downloads
+        .get(&download_id)
+        .ok_or("unknown download session")?;
+
+    let start = offset as usize;
+    if start > buffer.len() {
+        return Err("offset out of range".to_string());
+    }
+    let end = std::cmp::min(start + length as usize, buffer.len());
+    Ok(buffer[start..end].to_vec())
+}
+
+#[tauri::command]
+pub fn end_download(state: State<AppState>, download_id: String) -> Result<(), String> {
+    lock_recover(&state.downloads).remove(&download_id);
+    Ok(())
 }
 
 #[tauri::command]

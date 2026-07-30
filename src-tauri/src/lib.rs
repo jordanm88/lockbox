@@ -12,7 +12,7 @@ mod usb_root;
 mod updates;
 
 use state::AppState;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -28,14 +28,21 @@ pub fn run() {
             vault_key: Mutex::new(None),
             installing_apps: Mutex::new(HashSet::new()),
             sync_in_progress: Mutex::new(false),
+            uploads: Mutex::new(HashMap::new()),
+            downloads: Mutex::new(HashMap::new()),
         })
         .invoke_handler(tauri::generate_handler![
             commands::unlock_vault,
             commands::lock_vault,
             commands::vault_exists,
             commands::create_folder,
-            commands::encrypt_and_save_file,
-            commands::read_and_decrypt_file,
+            commands::begin_upload,
+            commands::append_upload_chunk,
+            commands::cancel_upload,
+            commands::finish_upload,
+            commands::begin_download,
+            commands::read_download_chunk,
+            commands::end_download,
             commands::list_vault_files,
             store_commands::get_app_catalog,
             store_commands::install_app,

@@ -102,6 +102,7 @@ export default function Vault() {
       const renamed: string[] = [];
       let completedBytes = 0;
       for (const [index, { file, relativePath }] of fileEntries.entries()) {
+        const bytesBeforeThisFile = completedBytes;
         setUploadProgress({
           completedFiles: index,
           totalFiles: fileEntries.length,
@@ -110,11 +111,22 @@ export default function Vault() {
           currentFile: relativePath,
         });
         const bytes = new Uint8Array(await file.arrayBuffer());
-        const savedAs = await encryptAndSaveFile(relativePath, bytes);
+        // Progress updates as each chunk of *this* file lands, not just
+        // between files — otherwise a single large file leaves the bar
+        // sitting still for as long as it takes, which reads as frozen.
+        const savedAs = await encryptAndSaveFile(relativePath, bytes, (bytesSent) => {
+          setUploadProgress({
+            completedFiles: index,
+            totalFiles: fileEntries.length,
+            completedBytes: bytesBeforeThisFile + bytesSent,
+            totalBytes,
+            currentFile: relativePath,
+          });
+        });
         if (savedAs !== relativePath) {
           renamed.push(`${relativePath} → ${savedAs}`);
         }
-        completedBytes += file.size;
+        completedBytes = bytesBeforeThisFile + file.size;
         setUploadProgress({
           completedFiles: index + 1,
           totalFiles: fileEntries.length,

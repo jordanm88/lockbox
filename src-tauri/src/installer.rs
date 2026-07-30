@@ -2,6 +2,7 @@ use crate::catalog::{self, ArchiveType, TargetSpec};
 use crate::{paths, usb_root};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+use std::env;
 use std::fs::File;
 use std::io::{Cursor, Read};
 use std::path::Path;
@@ -103,6 +104,7 @@ fn install_app_inner(
         ArchiveType::TarGz => extract_tar_gz(&bytes, install_dir)?,
         ArchiveType::Appimage => install_single_file(&bytes, install_dir, &target.launcher)?,
         ArchiveType::Binary | ArchiveType::Exe => install_single_file(&bytes, install_dir, &target.launcher)?,
+        ArchiveType::Installer => install_windows_installer(app_handle, app_id, &bytes, install_dir, &target.launcher)?,
     }
 
     emit_progress(
@@ -245,6 +247,49 @@ fn install_single_file(bytes: &[u8], dest_dir: &Path, launcher_name: &str) -> Re
         .map_err(|e| format!("failed to write {}: {e}", dest_path.display()))?;
     apply_unix_permissions(&dest_path, Some(0o755));
     Ok(())
+}
+
+fn install_windows_installer(
+    app_handle: &AppHandle,
+    app_id: &str,
+    bytes: &[u8],
+    install_dir: &Path,
+    launcher_name: &str,
+) -> Result<(), String> {
+    #[cfg(not(windows))]
+    {
+        let _ = (app_handle, app_id, bytes, install_dir, launcher_name);
+        return Err("Windows installer packages are only supported on Windows.".to_string());
+    }
+
+    #[cfg(windows)]
+    {
+        let temp_name = format!("lockbox-{app_id}-installer.exe");
+        let temp_path = env::temp_dir().join(temp_name);
+        std::fs::write(&temp_path, bytes)
+            .map_err(|e| format!("failed to stage installer: {e}"))?;
+
+        let install_dir_string = install_dir.to_string_lossy().to_string();
+        let status = std::process::Command::new(&temp_path)
+            .arg("/S")
+            .arg(format!("/D={install_dir_string}"))
+            .status()
+            .map_err(|e| format!("failed to launch installer: {e}"))?;
+
+        let _ = std::fs::remove_file(&temp_path);
+
+        if !status.success() {
+            return Err(format!("installer exited with status {status}"));
+        }
+
+        let launcher_path = paths::safe_join(install_dir, launcher_name)?;
+        if !launcher_path.is_file() {
+            return Err(format!("installer did not create expected launcher: {}", launcher_path.display()));
+        }
+
+        let _ = app_handle;
+        Ok(())
+    }
 }
 
 #[cfg(unix)]

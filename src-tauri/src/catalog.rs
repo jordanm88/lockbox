@@ -74,6 +74,8 @@ pub enum ArchiveType {
     Binary,
     #[serde(rename = "exe")]
     Exe,
+    #[serde(rename = "installer")]
+    Installer,
 }
 
 pub fn load_catalog(app_handle: &AppHandle) -> Result<AppCatalog, String> {

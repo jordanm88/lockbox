@@ -27,6 +27,7 @@ fn install_kind_label(target: &catalog::TargetSpec) -> String {
         catalog::ArchiveType::Appimage => "AppImage".to_string(),
         catalog::ArchiveType::Binary => "Direct binary".to_string(),
         catalog::ArchiveType::Exe => "Windows executable".to_string(),
+        catalog::ArchiveType::Installer => "Windows installer".to_string(),
     }
 }
 

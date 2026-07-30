@@ -48,8 +48,8 @@
         "url": { "type": "string", "format": "uri" },
         "archiveType": {
           "type": "string",
-          "enum": ["zip", "tar.gz", "appimage"],
-          "description": "zip/tar.gz are extracted into Apps/<id>/; appimage is saved as a single executable file."
+          "enum": ["zip", "tar.gz", "appimage", "binary", "exe", "installer"],
+          "description": "zip/tar.gz are extracted into Apps/<id>/; appimage/binary/exe are saved as single files; installer runs a silent Windows setup into Apps/<id>/.",
         },
         "sha256": {
           "type": "string",

@@ -16,6 +16,48 @@
       }
     },
     {
+      "id": "firefox",
+      "name": "Firefox",
+      "description": "Portable browser installed into the vault drive and launched from the App Store.",
+      "icon": "🌐",
+      "homepage": "https://www.mozilla.org/firefox/",
+      "targets": {
+        "windows": {
+          "url": "https://sourceforge.net/projects/portableapps/files/Mozilla%20Firefox%2C%20Portable%20Ed./download",
+          "archiveType": "installer",
+          "launcher": "FirefoxPortable.exe"
+        }
+      }
+    },
+    {
+      "id": "thunderbird",
+      "name": "Mozilla Thunderbird",
+      "description": "Portable mail client installed into the vault drive and launched from the App Store.",
+      "icon": "✉️",
+      "homepage": "https://www.thunderbird.net/",
+      "targets": {
+        "windows": {
+          "url": "https://sourceforge.net/projects/portableapps/files/Mozilla%20Thunderbird%2C%20P.E./download",
+          "archiveType": "installer",
+          "launcher": "ThunderbirdPortable.exe"
+        }
+      }
+    },
+    {
+      "id": "vscode",
+      "name": "Visual Studio Code",
+      "description": "Portable code editor archive with the regular Code.exe launcher.",
+      "icon": "VS",
+      "homepage": "https://code.visualstudio.com/",
+      "targets": {
+        "windows": {
+          "url": "https://update.code.visualstudio.com/latest/win32-x64-archive/stable",
+          "archiveType": "zip",
+          "launcher": "Code.exe"
+        }
+      }
+    },
+    {
       "id": "notepadpp-portable",
       "name": "Notepad++ Portable",
       "description": "Portable source-code editor with syntax highlighting and tabs.",

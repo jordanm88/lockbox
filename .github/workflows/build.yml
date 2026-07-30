@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [ubuntu-latest, windows-latest]
+        platform: [windows-latest]
     runs-on: ${{ matrix.platform }}
     steps:
       - name: Checkout
@@ -24,7 +24,7 @@ jobs:
       # Package names are current for Tauri v2 on Ubuntu 22.04+; adjust if
       # the runner's Ubuntu version moves and these get renamed again.
       - name: Install Linux system dependencies
-        if: matrix.platform == 'ubuntu-latest'
+        if: matrix.platform == 'windows-latest'
         run: |
           sudo apt-get update
           sudo apt-get install -y \

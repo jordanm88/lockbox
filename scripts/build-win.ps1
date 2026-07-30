@@ -11,14 +11,19 @@ try {
         throw "This script must be run from the repository root."
     }
 
-    Write-Host "Installing npm dependencies if needed..."
-    npm install | Out-Null
-
     if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
         Write-Warning "Cargo was not found on PATH. A Rust toolchain is required to build the Tauri Windows executable."
-        Write-Warning "Install Rust with rustup: https://rustup.rs/"
+        if (Get-Command rustup -ErrorAction SilentlyContinue) {
+            Write-Warning "Found rustup, but cargo is not currently available in this shell."
+            Write-Warning "Try opening a new shell or running: rustup toolchain list && rustup default stable"
+        } else {
+            Write-Warning "Install Rust with rustup: https://rustup.rs/"
+        }
         throw "cargo not found"
     }
+
+    Write-Host "Installing npm dependencies if needed..."
+    npm install | Out-Null
 
     Write-Host "Building frontend..."
     npm run build

@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "build:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-win.ps1",
+    "version:update": "node scripts/update-version.mjs",
     "preview": "vite preview",
     "tauri": "tauri"
   },

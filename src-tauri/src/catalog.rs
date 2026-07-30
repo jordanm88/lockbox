@@ -98,11 +98,19 @@ fn fetch_remote_catalog() -> Result<AppCatalog, String> {
 }
 
 fn load_bundled_catalog(app_handle: &AppHandle) -> Result<AppCatalog, String> {
-    let path = app_handle
+    let resource_result = app_handle
         .path()
         .resolve("catalog.json", tauri::path::BaseDirectory::Resource)
-        .map_err(|e| format!("failed to locate bundled catalog: {e}"))?;
-    let bytes =
-        std::fs::read(&path).map_err(|e| format!("failed to read bundled catalog: {e}"))?;
-    serde_json::from_slice(&bytes).map_err(|e| format!("invalid bundled catalog: {e}"))
+        .ok()
+        .and_then(|path| std::fs::read(path).ok())
+        .and_then(|bytes| serde_json::from_slice::<AppCatalog>(&bytes).ok());
+
+    if let Some(catalog) = resource_result {
+        return Ok(catalog);
+    }
+
+    // Dev/runtime fallback: keep a compiled-in copy so the App Store still
+    // works even if the packaged resource path is missing or misresolved.
+    let embedded = include_str!("../resources/catalog.json");
+    serde_json::from_str(embedded).map_err(|e| format!("invalid embedded catalog: {e}"))
 }

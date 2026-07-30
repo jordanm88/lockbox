@@ -1,6 +1,13 @@
 interface UploadPreviewPanelProps {
   paths: string[];
   uploading: boolean;
+  progress: {
+    completedFiles: number;
+    totalFiles: number;
+    completedBytes: number;
+    totalBytes: number;
+    currentFile: string | null;
+  } | null;
   onCancel: () => void;
   onConfirm: () => void;
 }
@@ -20,6 +27,7 @@ function renderLines(paths: string[]): string[] {
 export default function UploadPreviewPanel({
   paths,
   uploading,
+  progress,
   onCancel,
   onConfirm,
 }: UploadPreviewPanelProps) {
@@ -51,6 +59,28 @@ export default function UploadPreviewPanel({
           </button>
         </div>
       </div>
+
+      {uploading && progress && (
+        <div className="mb-4 space-y-2">
+          <div className="neo-border h-3 w-full overflow-hidden bg-slate-100">
+            <div
+              className="h-full bg-neo-blue transition-all duration-200"
+              style={{ width: `${Math.min(100, Math.round((progress.completedBytes / Math.max(1, progress.totalBytes)) * 100))}%` }}
+            />
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600">
+            <span>
+              {progress.completedFiles}/{progress.totalFiles} files
+            </span>
+            <span>
+              {Math.min(100, Math.round((progress.completedBytes / Math.max(1, progress.totalBytes)) * 100))}% complete
+            </span>
+          </div>
+          {progress.currentFile && (
+            <p className="truncate text-sm font-medium text-slate-700">Working on: {progress.currentFile}</p>
+          )}
+        </div>
+      )}
 
       <div className="neo-border max-h-72 overflow-auto bg-white p-3 font-mono text-xs text-ink/80">
         {shownLines.map((line, index) => (

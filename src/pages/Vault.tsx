@@ -46,6 +46,14 @@ interface PreviewState {
   mimeType: string;
 }
 
+interface UploadProgressState {
+  completedFiles: number;
+  totalFiles: number;
+  completedBytes: number;
+  totalBytes: number;
+  currentFile: string | null;
+}
+
 export default function Vault() {
   const [files, setFiles] = useState<VaultFileEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,6 +66,7 @@ export default function Vault() {
   const [confirmTarget, setConfirmTarget] = useState<VaultFileEntry | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [pendingUpload, setPendingUpload] = useState<FileWithPath[]>([]);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgressState | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
@@ -81,14 +90,38 @@ export default function Vault() {
     setUploading(true);
     setError(null);
     setNotice(null);
+    const totalBytes = fileEntries.reduce((sum, entry) => sum + entry.file.size, 0);
+    setUploadProgress({
+      completedFiles: 0,
+      totalFiles: fileEntries.length,
+      completedBytes: 0,
+      totalBytes,
+      currentFile: fileEntries[0]?.relativePath ?? null,
+    });
     try {
       const renamed: string[] = [];
-      for (const { file, relativePath } of fileEntries) {
+      let completedBytes = 0;
+      for (const [index, { file, relativePath }] of fileEntries.entries()) {
+        setUploadProgress({
+          completedFiles: index,
+          totalFiles: fileEntries.length,
+          completedBytes,
+          totalBytes,
+          currentFile: relativePath,
+        });
         const bytes = new Uint8Array(await file.arrayBuffer());
         const savedAs = await encryptAndSaveFile(relativePath, bytes);
         if (savedAs !== relativePath) {
           renamed.push(`${relativePath} → ${savedAs}`);
         }
+        completedBytes += file.size;
+        setUploadProgress({
+          completedFiles: index + 1,
+          totalFiles: fileEntries.length,
+          completedBytes,
+          totalBytes,
+          currentFile: index + 1 < fileEntries.length ? fileEntries[index + 1].relativePath : null,
+        });
       }
       if (renamed.length > 0) {
         setNotice(`Renamed to avoid overwriting existing files: ${renamed.join(", ")}`);
@@ -99,6 +132,7 @@ export default function Vault() {
       setError(err instanceof Error ? err.message : "Upload failed.");
     } finally {
       setUploading(false);
+      setUploadProgress(null);
     }
   }
 
@@ -349,6 +383,7 @@ export default function Vault() {
         <UploadPreviewPanel
           paths={pendingUpload.map((item) => item.relativePath)}
           uploading={uploading}
+          progress={uploadProgress}
           onCancel={cancelPendingUpload}
           onConfirm={confirmPendingUpload}
         />

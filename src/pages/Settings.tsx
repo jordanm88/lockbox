@@ -48,10 +48,10 @@ export default function Settings({ onLock }: SettingsProps) {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="neo-panel bg-paper p-6">
-          <h3 className="mb-4 text-xl font-black uppercase">Change Passphrase</h3>
+          <h3 className="mb-4 text-xl font-semibold text-ink">Change Passphrase</h3>
           <div className="flex flex-col gap-4">
             <label className="block">
-              <span className="mb-1 block font-black uppercase">Current Passphrase</span>
+              <span className="mb-1 block text-sm font-semibold text-slate-700">Current Passphrase</span>
               <input
                 type="password"
                 value={currentPass}
@@ -60,7 +60,7 @@ export default function Settings({ onLock }: SettingsProps) {
               />
             </label>
             <label className="block">
-              <span className="mb-1 block font-black uppercase">New Passphrase</span>
+              <span className="mb-1 block text-sm font-semibold text-slate-700">New Passphrase</span>
               <input
                 type="password"
                 value={newPass}
@@ -69,7 +69,7 @@ export default function Settings({ onLock }: SettingsProps) {
               />
             </label>
             <label className="block">
-              <span className="mb-1 block font-black uppercase">Confirm New Passphrase</span>
+              <span className="mb-1 block text-sm font-semibold text-slate-700">Confirm New Passphrase</span>
               <input
                 type="password"
                 value={confirmPass}
@@ -84,8 +84,8 @@ export default function Settings({ onLock }: SettingsProps) {
         </div>
 
         <div className="neo-panel bg-paper p-6">
-          <h3 className="mb-4 text-xl font-black uppercase">Lock Options</h3>
-          <span className="mb-2 block font-black uppercase">Auto-Lock After Inactivity</span>
+          <h3 className="mb-4 text-xl font-semibold text-ink">Lock Options</h3>
+          <span className="mb-2 block text-sm font-semibold text-slate-700">Auto-Lock After Inactivity</span>
           <div className="grid grid-cols-2 gap-3">
             {AUTO_LOCK_OPTIONS.map((option) => (
               <button
@@ -100,17 +100,17 @@ export default function Settings({ onLock }: SettingsProps) {
           </div>
 
           <div className="mt-8 border-t-4 border-ink pt-6">
-            <h3 className="mb-3 text-xl font-black uppercase">Danger Zone</h3>
+            <h3 className="mb-3 text-xl font-semibold text-ink">Danger Zone</h3>
             <button type="button" onClick={onLock} className="neo-btn w-full bg-neo-red py-3 text-white">
               🔒 Lock Vault Now
             </button>
           </div>
           <div className="mt-6 border-t-2 pt-4">
-            <h3 className="mb-3 text-xl font-black uppercase">Updates</h3>
+            <h3 className="mb-3 text-xl font-semibold text-ink">Updates</h3>
             <div className="flex items-center justify-between">
               <div>
-                <div className="font-black uppercase">Auto-check for updates</div>
-                <div className="text-sm text-ink/60">When enabled, Lockbox will check GitHub releases and open the release page automatically.</div>
+                <div className="font-semibold text-ink">Auto-check for updates</div>
+                <div className="text-sm text-slate-600">When enabled, Lockbox will check GitHub releases and open the release page automatically.</div>
               </div>
               <button
                 type="button"
@@ -129,8 +129,8 @@ export default function Settings({ onLock }: SettingsProps) {
           </div>
 
           <div className="mt-6 border-t-2 pt-4">
-            <h3 className="mb-3 text-xl font-black uppercase">Privacy Mode Transparency</h3>
-            <div className="neo-card bg-paper p-4 text-sm text-ink/80">
+            <h3 className="mb-3 text-xl font-semibold text-ink">Privacy Mode Transparency</h3>
+            <div className="neo-card bg-paper p-4 text-sm text-slate-700">
               <p className="font-bold">Portable from USB (recommended):</p>
               <p>Lockbox stores Vault and Apps on the USB drive, not in your profile folders by design.</p>
               <p className="mt-2 font-bold">Expected host traces:</p>

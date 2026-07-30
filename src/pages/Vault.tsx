@@ -283,10 +283,10 @@ export default function Vault() {
         onDrop={handleDrop}
       >
         <div>
-          <p className="font-black uppercase text-ink">
-            {loading ? "Loading…" : `${files.length} item${files.length === 1 ? "" : "s"}`}
+          <p className="font-semibold text-slate-700">
+            {loading ? "Loading..." : `${files.length} item${files.length === 1 ? "" : "s"}`}
           </p>
-          <p className="text-sm text-ink/60">Upload files or folders, drag and drop them here, and create nested folders directly inside the vault.</p>
+          <p className="text-sm text-slate-600">Upload files or folders, drag and drop them here, and create nested folders directly inside the vault.</p>
           <DropHint active={dragActive} />
         </div>
         <div className="flex flex-wrap gap-3">
@@ -339,7 +339,7 @@ export default function Vault() {
       </div>
 
       {error && (
-        <p className="neo-card mb-6 bg-neo-red px-4 py-3 font-black uppercase text-white">{error}</p>
+        <p className="neo-card mb-6 bg-neo-red px-4 py-3 text-sm font-semibold text-white">{error}</p>
       )}
       {notice && (
         <p className="neo-card mb-6 bg-neo-yellow px-4 py-3 font-bold">{notice}</p>
@@ -356,7 +356,7 @@ export default function Vault() {
 
       <div className="">
         {files.length === 0 && !loading ? (
-          <div className="neo-panel p-8 text-center font-black uppercase text-ink/60">Vault is empty. Upload files or folders to start.</div>
+          <div className="neo-panel p-8 text-center font-semibold text-slate-600">Vault is empty. Upload files or folders to start.</div>
         ) : (
           <VaultTreeView entries={files} onView={handleView} onDelete={requestDelete} />
         )}

@@ -32,8 +32,8 @@ export default function UploadPreviewPanel({
     <div className="neo-panel mb-6 bg-paper p-5">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="font-black uppercase text-ink">Upload Preview</p>
-          <p className="text-sm font-bold text-ink/70">
+          <p className="font-semibold text-ink">Upload Preview</p>
+          <p className="text-sm font-medium text-slate-600">
             {paths.length} file{paths.length === 1 ? "" : "s"} staged for encryption
           </p>
         </div>
@@ -57,7 +57,7 @@ export default function UploadPreviewPanel({
           <div key={`${line}-${index}`}>{line}</div>
         ))}
         {hiddenCount > 0 && (
-          <div className="mt-2 font-bold text-ink/60">…and {hiddenCount} more</div>
+          <div className="mt-2 font-semibold text-slate-600">...and {hiddenCount} more</div>
         )}
       </div>
     </div>

@@ -55,7 +55,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block font-black uppercase">{label}</span>
+      <span className="mb-1 block text-sm font-semibold text-slate-700">{label}</span>
       <input
         type={type}
         value={value}
@@ -75,7 +75,7 @@ function StatusBadge({ status }: { status: SyncStatus }) {
     failed: { label: "✗ Failed", className: "bg-neo-red text-white" },
   };
   const { label, className } = variants[status];
-  return <span className={`neo-border px-3 py-1 text-sm font-black uppercase ${className}`}>{label}</span>;
+  return <span className={`neo-border px-3 py-1 text-sm font-semibold ${className}`}>{label}</span>;
 }
 
 export default function CloudSync() {
@@ -181,12 +181,12 @@ export default function CloudSync() {
       <PageHeader icon="☁️" title="Cloud Sync" subtitle="Back up an encrypted copy of the vault off-drive via rclone." />
 
       {error && (
-        <p className="neo-card mb-6 bg-neo-red px-4 py-3 font-black uppercase text-white">{error}</p>
+        <p className="neo-card mb-6 bg-neo-red px-4 py-3 text-sm font-semibold text-white">{error}</p>
       )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="neo-panel bg-paper p-6">
-          <p className="mb-3 text-sm font-black uppercase tracking-[0.2em] text-ink/75">Provider</p>
+          <p className="mb-3 text-sm font-semibold text-slate-600">Provider</p>
           <div className="mb-6 flex flex-wrap gap-3">
             {PROVIDERS.map((option) => (
               <button
@@ -201,7 +201,7 @@ export default function CloudSync() {
           </div>
 
           {loading ? (
-            <p className="font-black uppercase">Loading…</p>
+            <p className="font-medium text-slate-700">Loading...</p>
           ) : (
             <div className="flex flex-col gap-4">
               {config.provider === "s3" && (
@@ -283,7 +283,7 @@ export default function CloudSync() {
 
         <div className="neo-panel flex flex-col bg-paper p-6">
           <div className="mb-4 flex items-center justify-between">
-            <p className="text-sm font-black uppercase tracking-[0.2em] text-ink/70">Status</p>
+            <p className="text-sm font-semibold text-slate-600">Status</p>
             <StatusBadge status={syncStatus} />
           </div>
 

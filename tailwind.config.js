@@ -1,39 +1,30 @@
-/**
- * Neo-Brutalism design tokens for Lockbox.
- * Thick black borders + hard offset shadows + loud color blocks, no soft edges.
- */
 export default {
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
       colors: {
-        ink: "#000000",
-        paper: "#FFFDF7",
+        ink: "#0f172a",
+        paper: "#f8fafc",
         neo: {
-          yellow: "#FFE600",
-          pink: "#FF4FD8",
-          blue: "#3D5AFE",
-          cyan: "#00E5FF",
-          green: "#00FF85",
-          orange: "#FF7A00",
-          red: "#FF3B3B",
-          purple: "#B026FF",
+          yellow: "#f59e0b",
+          pink: "#db2777",
+          blue: "#2563eb",
+          cyan: "#0ea5e9",
+          green: "#059669",
+          orange: "#ea580c",
+          red: "#dc2626",
+          purple: "#7c3aed",
         },
       },
       fontFamily: {
-        display: [
-          '"Arial Black"',
-          '"Helvetica Neue"',
-          "Arial",
-          "sans-serif",
-        ],
+        display: ['"Manrope"', '"Segoe UI"', '"Helvetica Neue"', "Arial", "sans-serif"],
       },
       boxShadow: {
-        brutal: "4px 4px 0px 0px #000000",
-        "brutal-sm": "2px 2px 0px 0px #000000",
-        "brutal-lg": "8px 8px 0px 0px #000000",
-        "brutal-xl": "12px 12px 0px 0px #000000",
-        "brutal-white": "4px 4px 0px 0px #FFFFFF",
+        brutal: "0 8px 20px rgba(15, 23, 42, 0.12)",
+        "brutal-sm": "0 4px 12px rgba(15, 23, 42, 0.12)",
+        "brutal-lg": "0 14px 28px rgba(15, 23, 42, 0.14)",
+        "brutal-xl": "0 22px 44px rgba(15, 23, 42, 0.16)",
+        "brutal-white": "0 8px 20px rgba(255, 255, 255, 0.18)",
       },
       transitionProperty: {
         brutal: "transform, box-shadow",
@@ -54,40 +45,42 @@ export default {
   },
   plugins: [
     function ({ addComponents, theme }) {
-      const border = `4px solid ${theme("colors.ink")}`;
+      const border = `1px solid rgba(15, 23, 42, 0.14)`;
       addComponents({
         ".neo-border": {
           border,
+          borderRadius: "12px",
         },
         ".neo-card": {
           border,
           boxShadow: theme("boxShadow.brutal"),
           backgroundColor: theme("colors.paper"),
+          borderRadius: "16px",
         },
         ".neo-panel": {
           border,
           boxShadow: theme("boxShadow.brutal-lg"),
           backgroundColor: theme("colors.paper"),
+          borderRadius: "20px",
         },
         ".neo-btn": {
           border,
-          boxShadow: theme("boxShadow.brutal"),
+          boxShadow: theme("boxShadow.brutal-sm"),
           backgroundColor: theme("colors.paper"),
-          fontWeight: "800",
-          textTransform: "uppercase",
-          letterSpacing: "0.02em",
+          fontWeight: "600",
+          borderRadius: "12px",
           transitionProperty: theme("transitionProperty.brutal"),
-          transitionDuration: "100ms",
+          transitionDuration: "140ms",
           transitionTimingFunction: "ease-out",
           cursor: "pointer",
         },
         ".neo-btn:hover": {
-          transform: "translate(2px, 2px)",
-          boxShadow: theme("boxShadow.brutal-sm"),
+          transform: "translateY(-1px)",
+          boxShadow: theme("boxShadow.brutal"),
         },
         ".neo-btn:active": {
-          transform: "translate(4px, 4px)",
-          boxShadow: "none",
+          transform: "translateY(0)",
+          boxShadow: theme("boxShadow.brutal-sm"),
         },
         ".neo-btn:disabled": {
           opacity: "0.5",
@@ -96,12 +89,14 @@ export default {
         },
         ".neo-input": {
           border,
+          borderRadius: "12px",
           backgroundColor: theme("colors.paper"),
-          fontWeight: "700",
+          fontWeight: "500",
           outline: "none",
         },
         ".neo-input:focus": {
-          boxShadow: theme("boxShadow.brutal-sm"),
+          boxShadow: `0 0 0 3px rgba(37, 99, 235, 0.22)`,
+          borderColor: theme("colors.neo.blue"),
         },
       });
     },

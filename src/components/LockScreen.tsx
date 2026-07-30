@@ -72,27 +72,27 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
   const buttonText = freshInstall ? "Create Master Passphrase" : "Unlock Vault";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/80 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
       <form
         onSubmit={handleSubmit}
-        className={`neo-panel w-full max-w-md border-neo-blue bg-paper p-8 ${shake ? "animate-shake" : ""}`}
+        className={`neo-panel w-full max-w-md border-slate-200 bg-white p-8 ${shake ? "animate-shake" : ""}`}
       >
         <div className="mb-6 text-center">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-neo-blue text-4xl shadow-brutal">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-neo-blue text-4xl text-white shadow-brutal">
             🔒
           </div>
-          <h1 className="mt-4 text-4xl font-black uppercase tracking-tight text-ink">Lockbox</h1>
-          <p className="mt-2 text-sm font-bold text-ink/70">{title}</p>
-          <p className="mt-2 text-sm text-ink/60">{subtitle}</p>
+          <h1 className="mt-4 text-4xl font-extrabold tracking-tight text-ink">Lockbox</h1>
+          <p className="mt-2 text-sm font-semibold text-slate-700">{title}</p>
+          <p className="mt-2 text-sm text-slate-600">{subtitle}</p>
         </div>
 
         {isLoading ? (
-          <div className="neo-card rounded-sm border-4 border-ink bg-paper px-4 py-5 text-center font-black uppercase text-ink">
+          <div className="neo-card px-4 py-5 text-center font-semibold text-ink">
             Checking vault status…
           </div>
         ) : (
           <>
-            <label htmlFor="passphrase" className="mb-2 block text-sm font-black uppercase tracking-[0.2em] text-ink/80">
+            <label htmlFor="passphrase" className="mb-2 block text-sm font-semibold text-slate-700">
               Master Passphrase
             </label>
             <div className="flex gap-2">
@@ -106,12 +106,12 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
                   setError(null);
                 }}
                 placeholder="••••••••••••"
-                className="neo-input w-full px-4 py-3 text-lg"
+                className="neo-input w-full px-4 py-3 text-base"
               />
               <button
                 type="button"
                 onClick={() => setShowPassphrase((value) => !value)}
-                className="neo-btn shrink-0 rounded-sm bg-neo-yellow px-4 text-ink"
+                className="neo-btn shrink-0 bg-white px-4 text-ink"
                 aria-label={showPassphrase ? "Hide passphrase" : "Show passphrase"}
               >
                 {showPassphrase ? "🙈" : "👁️"}
@@ -120,7 +120,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
 
             {freshInstall && (
               <>
-                <label htmlFor="confirm-passphrase" className="mt-4 block text-sm font-black uppercase tracking-[0.2em] text-ink/80">
+                <label htmlFor="confirm-passphrase" className="mt-4 block text-sm font-semibold text-slate-700">
                   Confirm Passphrase
                 </label>
                 <input
@@ -132,13 +132,13 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
                     setError(null);
                   }}
                   placeholder="••••••••••••"
-                  className="neo-input w-full px-4 py-3 text-lg"
+                  className="neo-input w-full px-4 py-3 text-base"
                 />
               </>
             )}
 
             {error && (
-              <p className="mt-4 rounded-sm border-4 border-ink bg-neo-red px-3 py-3 font-black uppercase text-white">
+              <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-3 text-sm font-semibold text-red-700">
                 {error}
               </p>
             )}

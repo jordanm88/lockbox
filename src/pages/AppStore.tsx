@@ -148,13 +148,13 @@ export default function AppStore() {
       <PageHeader icon="🛍️" title="App Store" subtitle="Portable binaries install straight into /Apps on this drive." />
 
       {error && (
-        <p className="neo-card mb-6 bg-neo-red px-4 py-3 font-black uppercase text-white">{error}</p>
+        <p className="neo-card mb-6 bg-neo-red px-4 py-3 text-sm font-semibold text-white">{error}</p>
       )}
 
       {loading ? (
-        <p className="font-black uppercase">Loading catalog…</p>
+        <p className="font-semibold text-slate-700">Loading catalog...</p>
       ) : apps.length === 0 ? (
-        <div className="neo-card p-8 text-center font-black uppercase text-ink/70">
+        <div className="neo-card p-8 text-center font-semibold text-slate-600">
           No catalog apps are available yet.
         </div>
       ) : (
@@ -171,7 +171,7 @@ export default function AppStore() {
                 <div className="flex items-start gap-4">
                   <span className="text-4xl">{app.icon}</span>
                   <div className="flex-1">
-                    <p className="text-lg font-black text-ink">{app.name}</p>
+                    <p className="text-lg font-semibold text-ink">{app.name}</p>
                     <p className="mt-1 font-bold text-ink/60">{app.description}</p>
                     {app.sizeBytes !== null && (
                       <p className="mt-2 text-sm font-bold text-ink/40">{formatBytes(app.sizeBytes)}</p>
@@ -187,7 +187,7 @@ export default function AppStore() {
                         style={{ width: percent !== null ? `${percent}%` : "100%" }}
                       />
                     </div>
-                    <p className="text-sm font-black uppercase text-ink/70">
+                    <p className="text-sm font-medium text-slate-600">
                       {appProgress?.stage === "extracting"
                         ? "Extracting…"
                         : percent !== null

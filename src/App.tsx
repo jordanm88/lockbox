@@ -33,10 +33,10 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-ink/5">
+    <div className="min-h-screen bg-transparent">
       <div className="flex min-h-screen">
         <Sidebar activeTab={activeTab} onSelectTab={setActiveTab} onLock={handleLock} />
-        <main className="flex-1 overflow-y-auto p-8">
+        <main className="flex-1 overflow-y-auto p-6 lg:p-8">
           <div className="mx-auto w-full max-w-7xl">
             {activeTab === "vault" && <Vault />}
             {activeTab === "appstore" && <AppStore />}

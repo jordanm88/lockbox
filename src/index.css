@@ -9,15 +9,15 @@ body,
 }
 
 body {
-  @apply bg-gradient-to-br from-paper via-[#f7f5ee] to-[#dce8ff] text-ink font-display antialiased;
+  @apply bg-gradient-to-br from-slate-50 via-[#f8fafc] to-[#eaf1ff] text-ink font-display antialiased;
   background-image:
-    radial-gradient(circle at 20% 20%, rgba(0, 0, 0, 0.06) 1px, transparent 1px),
-    radial-gradient(circle at 80% 80%, rgba(0, 0, 0, 0.04) 1px, transparent 1px);
-  background-size: 24px 24px;
+    radial-gradient(circle at 14% 18%, rgba(37, 99, 235, 0.08), transparent 38%),
+    radial-gradient(circle at 86% 8%, rgba(14, 165, 233, 0.08), transparent 32%),
+    linear-gradient(to bottom right, rgba(255, 255, 255, 0.75), rgba(248, 250, 252, 0.85));
 }
 
 ::selection {
-  background: rgba(255, 230, 0, 0.25);
+  background: rgba(37, 99, 235, 0.22);
 }
 
 html {

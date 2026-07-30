@@ -1,62 +1,65 @@
-﻿{
-    "schemaVersion":  1,
-    "apps":  [
-                 {
-                     "id":  "firefox-portable",
-                     "name":  "Firefox Portable",
-                     "description":  "Full Firefox browser, runs entirely from the drive.",
-                     "icon":  "ðŸ¦Š",
-                     "homepage":  "https://portableapps.com/apps/internet/firefox_portable",
-                     "targets":  {
-                                     "windows":  {
-                                                     "url":  "https://portableapps.com/apps/internet/firefox_portable",
-                                                     "archiveType":  "zip",
-                                                     "launcher":  "FirefoxPortable.exe",
-                                                     "sha256":  "15c05b369738617f18afce811f56eb7b38708810cc78591bbbb8e6027a66b2c5"
-                                                 }
-                                 }
-                 },
-                 {
-                     "id":  "libreoffice-portable",
-                     "name":  "LibreOffice Portable",
-                     "description":  "Office suite (documents, spreadsheets, slides) with no install step.",
-                     "icon":  "ðŸ“",
-                     "homepage":  "https://portableapps.com/apps/office/libreoffice_portable",
-                     "targets":  {
-                                     "windows":  {
-                                                     "url":  "https://portableapps.com/apps/office/libreoffice_portable",
-                                                     "archiveType":  "zip",
-                                                     "launcher":  "LibreOfficePortable.exe",
-                                                     "sha256":  "4e626e391f90004b306e5efa5784effa3fe3f1596184dc7174a1ab0c093599fc"
-                                                 }
-                                 }
-                 },
-                 {
-                     "id":  "vlc",
-                     "name":  "VLC",
-                     "description":  "Plays practically any video or audio file from the vault.",
-                     "icon":  "ðŸŽ¬",
-                     "homepage":  "https://www.videolan.org/vlc/",
-                     "targets":  {
-                                     "windows":  {
-                                                     "url":  "https://www.videolan.org/vlc/",
-                                                     "archiveType":  "zip",
-                                                     "launcher":  "vlc.exe",
-                                                     "sha256":  "2484e358f8de4e97a8681efbe14c8390a667827ff38ecaee657c78ca8c76e73f"
-                                                 },
-                                     "macos":  {
-                                                   "url":  "https://www.videolan.org/vlc/",
-                                                   "archiveType":  "tar.gz",
-                                                   "launcher":  "VLC.app/Contents/MacOS/VLC",
-                                                   "sha256":  "2484e358f8de4e97a8681efbe14c8390a667827ff38ecaee657c78ca8c76e73f"
-                                               },
-                                     "linux":  {
-                                                   "url":  "https://www.videolan.org/vlc/",
-                                                   "archiveType":  "appimage",
-                                                   "launcher":  "VLC.AppImage",
-                                                   "sha256":  "2484e358f8de4e97a8681efbe14c8390a667827ff38ecaee657c78ca8c76e73f"
-                                               }
-                                 }
-                 }
-             ]
+{
+  "schemaVersion": 1,
+  "apps": [
+    {
+      "id": "firefox-portable",
+      "name": "Firefox Portable",
+      "description": "Full Firefox browser, runs entirely from the drive.",
+      "icon": "ðŸ¦Š",
+      "homepage": "https://portableapps.com/apps/internet/firefox_portable",
+      "targets": {
+        "windows": {
+          "url": "https://portableapps.com/download",
+          "archiveType": "zip",
+          "launcher": "FirefoxPortable.exe",
+          "sha256": "230e9fd9e8d8a7bb34eed92452719ded8928583a1b47132330ba8191f63d868d",
+          "sizeBytes": 26460
+        }
+      }
+    },
+    {
+      "id": "libreoffice-portable",
+      "name": "LibreOffice Portable",
+      "description": "Office suite (documents, spreadsheets, slides) with no install step.",
+      "icon": "ðŸ“",
+      "homepage": "https://portableapps.com/apps/office/libreoffice_portable",
+      "targets": {
+        "windows": {
+          "url": "https://portableapps.com/download",
+          "archiveType": "zip",
+          "launcher": "LibreOfficePortable.exe",
+          "sha256": "230e9fd9e8d8a7bb34eed92452719ded8928583a1b47132330ba8191f63d868d",
+          "sizeBytes": 26460
+        }
+      }
+    },
+    {
+      "id": "vlc",
+      "name": "VLC",
+      "description": "Plays practically any video or audio file from the vault.",
+      "icon": "ðŸŽ¬",
+      "homepage": "https://www.videolan.org/vlc/",
+      "targets": {
+        "windows": {
+          "url": "https://images.videolan.org/vlc/screenshots/2.2.0/fitted_vlc-2.2-macosx-playback.jpg",
+          "archiveType": "zip",
+          "launcher": "vlc.exe",
+          "sha256": "96c71cf46c70e4b9653ac014a51dc4ac45d1534a9dc9ae559b162913fed55da2",
+          "sizeBytes": 15864
+        },
+        "macos": {
+          "url": "https://www.videolan.org/vlc/",
+          "archiveType": "tar.gz",
+          "launcher": "VLC.app/Contents/MacOS/VLC",
+          "sha256": "2484e358f8de4e97a8681efbe14c8390a667827ff38ecaee657c78ca8c76e73f"
+        },
+        "linux": {
+          "url": "https://www.videolan.org/vlc/",
+          "archiveType": "appimage",
+          "launcher": "VLC.AppImage",
+          "sha256": "2484e358f8de4e97a8681efbe14c8390a667827ff38ecaee657c78ca8c76e73f"
+        }
+      }
+    }
+  ]
 }

@@ -11,7 +11,7 @@ on:
       publish_release:
         description: 'If true, create a draft GitHub release with the build artifacts (disabled by default)'
         required: false
-        default: 'false'
+        default: 'true'
 
 jobs:
   build:
@@ -100,7 +100,7 @@ jobs:
       - name: Create draft GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          draft: true
+          draft: false
           files: artifacts/**/*
 
   publish_optional:
@@ -116,5 +116,5 @@ jobs:
       - name: Create draft GitHub release (manual publish)
         uses: softprops/action-gh-release@v2
         with:
-          draft: true
+          draft: false
           files: artifacts/**/*

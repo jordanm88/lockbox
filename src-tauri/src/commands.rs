@@ -422,3 +422,53 @@ pub fn list_vault_files(state: State<AppState>) -> Result<Vec<VaultFileEntry>, S
     entries.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(entries)
 }
+
+#[tauri::command]
+pub fn delete_vault_entry(state: State<AppState>, relative_path: String) -> Result<(), String> {
+    let guard = lock_recover(&state.vault_key);
+    let key = guard.as_ref().ok_or("vault is locked")?;
+
+    let vault_dir = usb_root::vault_dir(&state.root);
+    let mut index = load_or_upgrade_index(&vault_dir, key)?;
+    let normalized = normalize_relative_path(&relative_path)?;
+
+    // Collect entries to remove: exact match and, for directories, any children
+    let mut to_remove = Vec::new();
+    for (i, entry) in index.entries.iter().enumerate() {
+        if entry.original_path == normalized || entry.original_path.starts_with(&format!("{}/", normalized)) {
+            to_remove.push(i);
+        }
+    }
+
+    if to_remove.is_empty() {
+        return Err("path not found".to_string());
+    }
+
+    // Remove blobs for the entries we're deleting
+    let data_dir = ensure_data_dir(&vault_dir)?;
+    // iterate in reverse so indices are stable when removing
+    to_remove.sort_unstable_by(|a, b| b.cmp(a));
+    for idx in to_remove {
+        if let Some(entry) = index.entries.get(idx) {
+            if let Some(blob) = &entry.blob_name {
+                let _ = fs::remove_file(data_dir.join(blob));
+            }
+        }
+        index.entries.remove(idx);
+    }
+
+    save_index(&vault_dir, key, &index)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn uninstall_app(state: State<AppState>, app_id: String) -> Result<(), String> {
+    let root = &state.root;
+    let apps_dir = usb_root::apps_dir(root);
+    let target = apps_dir.join(&app_id);
+    if !target.exists() {
+        return Err("app not found".to_string());
+    }
+    fs::remove_dir_all(&target).map_err(|e| format!("failed to remove app: {e}"))?;
+    Ok(())
+}

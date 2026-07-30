@@ -9,6 +9,7 @@ import {
   installApp,
   launchPortableApp,
   onInstallProgress,
+  uninstallApp,
 } from "../lib/appStoreBridge";
 
 interface ProgressState {
@@ -80,6 +81,34 @@ export default function AppStore() {
         return next;
       });
     }
+  }
+
+  // Uninstall flow
+  const [uninstallOpen, setUninstallOpen] = useState(false);
+  const [uninstallTarget, setUninstallTarget] = useState<CatalogEntry | null>(null);
+
+  function requestUninstall(entry: CatalogEntry) {
+    setUninstallTarget(entry);
+    setUninstallOpen(true);
+  }
+
+  async function confirmUninstall() {
+    if (!uninstallTarget) return;
+    setError(null);
+    try {
+      await uninstallApp(uninstallTarget.id);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Failed to uninstall ${uninstallTarget.name}.`);
+    } finally {
+      setUninstallTarget(null);
+      setUninstallOpen(false);
+    }
+  }
+
+  function cancelUninstall() {
+    setUninstallTarget(null);
+    setUninstallOpen(false);
   }
 
   // Confirmation dialog state
@@ -173,9 +202,14 @@ export default function AppStore() {
                     Unavailable on this OS
                   </ActionButton>
                 ) : app.installed ? (
-                  <ActionButton type="button" onClick={() => handleLaunch(app)} variant="primary" className="w-full">
-                    ▶ Launch
-                  </ActionButton>
+                  <div className="flex gap-2">
+                    <ActionButton type="button" onClick={() => handleLaunch(app)} variant="primary" className="flex-1">
+                      ▶ Launch
+                    </ActionButton>
+                    <ActionButton type="button" onClick={() => requestUninstall(app)} className="w-36">
+                      🗑 Uninstall
+                    </ActionButton>
+                  </div>
                 ) : (
                   <div className="flex gap-2">
                     <ActionButton
@@ -205,6 +239,16 @@ export default function AppStore() {
         cancelLabel="Cancel"
         onConfirm={confirmInstall}
         onCancel={cancelInstall}
+      />
+
+      <ConfirmDialog
+        open={uninstallOpen}
+        title={uninstallTarget ? `Uninstall ${uninstallTarget.name}?` : "Uninstall"}
+        description={uninstallTarget ? uninstallTarget.description : undefined}
+        confirmLabel="Uninstall"
+        cancelLabel="Cancel"
+        onConfirm={confirmUninstall}
+        onCancel={cancelUninstall}
       />
 
       <footer className="mt-8 text-center text-sm text-ink/60">Version {pkg.version}</footer>

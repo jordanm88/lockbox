@@ -27,17 +27,32 @@ const catalogPath = path.resolve(__dirname, '..', '..', 'src-tauri', 'Resources'
       await page.goto(app.homepage, { waitUntil: 'networkidle' });
       const downloadHandle = await page.$("a:has-text('Download'), button:has-text('Download'), a:has-text('download'), button:has-text('download')");
       let finalUrl = null;
+      // Click the download control and wait for an archive-like response
       if (downloadHandle) {
         const [response] = await Promise.all([
-          page.waitForResponse(r => r.url().includes('.zip') || r.url().includes('.exe') || r.url().includes('.tar') || r.url().includes('.7z') || r.status() === 200, { timeout: 10000 }).catch(() => null),
+          page.waitForResponse(r => {
+            const u = r.url();
+            const h = r.headers();
+            const ct = (h['content-type'] || '').toLowerCase();
+            const cd = (h['content-disposition'] || '').toLowerCase();
+            if (/\.(zip|exe|tar|gz|appimage|7z)$/i.test(u)) return true;
+            if (/application\/(zip|x-zip-compressed|octet-stream|x-7z-compressed|x-gzip)/i.test(ct)) return true;
+            if (/filename=.*\.(zip|exe|tar|gz|appimage|7z)/i.test(cd)) return true;
+            return false;
+          }, { timeout: 10000 }).catch(() => null),
           downloadHandle.click().catch(() => null),
         ]);
-        if (response) finalUrl = response.url();
+        if (response && response.ok()) {
+          finalUrl = response.url();
+        }
       }
 
+      // If the click didn't yield an archive response, search for archive links on the page
       if (!finalUrl) {
         const links = await page.$$eval('a[href]', els => els.map(e => e.href));
-        finalUrl = links.find(u => /\.(zip|exe|tar|gz|AppImage|7z)$/i.test(u));
+        // Prefer links whose href contains 'mirror' or points at known archive extensions
+        finalUrl = links.find(u => /mirror/i.test(u) && /\.(zip|exe|tar|gz|appimage|7z)$/i.test(u));
+        if (!finalUrl) finalUrl = links.find(u => /\.(zip|exe|tar|gz|appimage|7z)$/i.test(u));
       }
 
       if (!finalUrl) {

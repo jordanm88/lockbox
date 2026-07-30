@@ -9,11 +9,11 @@
       "homepage": "https://portableapps.com/apps/internet/firefox_portable",
       "targets": {
         "windows": {
-          "url": "https://portableapps.com/download",
+          "url": "https://portableapps.com/downloading/?a=PortableApps.comPlatform&s=s&d=pa&n=The%20PortableApps.com%20Platform&f=PortableApps.com_Platform_Setup_30.4.2.paf.exe",
           "archiveType": "zip",
           "launcher": "FirefoxPortable.exe",
-          "sha256": "230e9fd9e8d8a7bb34eed92452719ded8928583a1b47132330ba8191f63d868d",
-          "sizeBytes": 26460
+          "sha256": "6bf4f53ca3a87a5bb1cc2552cda9b2a7ef1f2dc9ac12f370face59bd52d94451",
+          "sizeBytes": 25624
         }
       }
     },
@@ -25,11 +25,11 @@
       "homepage": "https://portableapps.com/apps/office/libreoffice_portable",
       "targets": {
         "windows": {
-          "url": "https://portableapps.com/download",
+          "url": "https://portableapps.com/downloading/?a=PortableApps.comPlatform&s=s&d=pa&n=The%20PortableApps.com%20Platform&f=PortableApps.com_Platform_Setup_30.4.2.paf.exe",
           "archiveType": "zip",
           "launcher": "LibreOfficePortable.exe",
-          "sha256": "230e9fd9e8d8a7bb34eed92452719ded8928583a1b47132330ba8191f63d868d",
-          "sizeBytes": 26460
+          "sha256": "6bf4f53ca3a87a5bb1cc2552cda9b2a7ef1f2dc9ac12f370face59bd52d94451",
+          "sizeBytes": 25624
         }
       }
     },
@@ -41,11 +41,11 @@
       "homepage": "https://www.videolan.org/vlc/",
       "targets": {
         "windows": {
-          "url": "https://images.videolan.org/vlc/screenshots/2.2.0/fitted_vlc-2.2-macosx-playback.jpg",
+          "url": "https://get.videolan.org/vlc/3.0.23/win64/vlc-3.0.23-win64.exe",
           "archiveType": "zip",
           "launcher": "vlc.exe",
-          "sha256": "96c71cf46c70e4b9653ac014a51dc4ac45d1534a9dc9ae559b162913fed55da2",
-          "sizeBytes": 15864
+          "sha256": "85052791cb3067d60bf4bccc2be8a34f8cb7bb721787a109cdfb21f272415087",
+          "sizeBytes": 29335
         },
         "macos": {
           "url": "https://www.videolan.org/vlc/",

@@ -30,6 +30,10 @@ export function installApp(appId: string): Promise<void> {
   return invoke<void>("install_app", { appId });
 }
 
+export function uninstallApp(appId: string): Promise<void> {
+  return invoke<void>("uninstall_app", { appId });
+}
+
 export function launchPortableApp(appPath: string): Promise<void> {
   return invoke<void>("launch_portable_app", { appPath });
 }

@@ -23,6 +23,50 @@ if (-not (Test-Path $UsbDrivePath)) {
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $builtExe = Join-Path $repoRoot "src-tauri\target\release\Lockbox.exe"
+$rcloneRoot = Join-Path $UsbDrivePath "Tools\win"
+$rcloneExe = Join-Path $rcloneRoot "rclone.exe"
+
+function Get-RcloneDownloadUri {
+    if ([Environment]::Is64BitOperatingSystem -and [Environment]::Is64BitProcess) {
+        return "https://downloads.rclone.org/rclone-current-windows-amd64.zip"
+    }
+
+    if ([Environment]::Is64BitOperatingSystem) {
+        return "https://downloads.rclone.org/rclone-current-windows-amd64.zip"
+    }
+
+    return "https://downloads.rclone.org/rclone-current-windows-386.zip"
+}
+
+function Update-RcloneBinary {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$DestinationPath
+    )
+
+    New-Item -ItemType Directory -Force -Path $rcloneRoot | Out-Null
+
+    $downloadUri = Get-RcloneDownloadUri
+    $zipPath = Join-Path $env:TEMP "rclone-current.zip"
+    $extractDir = Join-Path $env:TEMP ("rclone-" + [Guid]::NewGuid().ToString("N"))
+
+    Write-Host "Downloading current rclone release from $downloadUri ..."
+    Invoke-WebRequest -Uri $downloadUri -OutFile $zipPath
+
+    try {
+        Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
+        $sourceExe = Get-ChildItem -Path $extractDir -Recurse -Filter "rclone.exe" | Select-Object -First 1
+        if (-not $sourceExe) {
+            throw "rclone.exe was not found in the downloaded archive."
+        }
+
+        Copy-Item -Path $sourceExe.FullName -Destination $DestinationPath -Force
+    }
+    finally {
+        Remove-Item -Path $zipPath -Force -ErrorAction SilentlyContinue
+        Remove-Item -Path $extractDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
 
 if (-not (Test-Path $builtExe)) {
     $legacyExe = Join-Path $repoRoot "src-tauri\target\release\lockbox.exe"
@@ -59,16 +103,16 @@ if (Get-Command Unblock-File -ErrorAction SilentlyContinue) {
     Write-Warning "Unable to run Unblock-File on this PowerShell version. If Windows still blocks the exe, use: Unblock-File -Path '$destExe'"
 }
 
-$rcloneDest = Join-Path $UsbDrivePath "Tools\win\rclone.exe"
-if (-not (Test-Path $rcloneDest)) {
-    Write-Warning "No rclone.exe at Tools\win\rclone.exe yet. Cloud Sync (Phase 4) needs a real rclone binary there — download it from https://rclone.org/downloads/ and copy it in manually."
-}
+Update-RcloneBinary -DestinationPath $rcloneExe
+Write-Host "Updated rclone.exe at $rcloneExe from the current official release"
 
 Write-Host ""
 Write-Host "Done. USB layout:"
 Write-Host "  $UsbDrivePath\Lockbox-Windows.exe"
 Write-Host "  $UsbDrivePath\Vault\"
 Write-Host "  $UsbDrivePath\Apps\"
-Write-Host "  $UsbDrivePath\Tools\win\ (mac\, linux\ also created, empty)"
+Write-Host "  $UsbDrivePath\Tools\win\rclone.exe"
+Write-Host "  $UsbDrivePath\Tools\mac\"
+Write-Host "  $UsbDrivePath\Tools\linux\"
 Write-Host ""
 Write-Host "If Windows SmartScreen blocks the exe on first run, see docs/DISTRIBUTION.md."

@@ -101,9 +101,18 @@ Since there's no cross-compilation set up, packaging all three platforms
 onto one drive means running the matching build + script on each OS (or
 building in CI and downloading each platform's artifact locally before
 running its script). Each script also checks for a real `rclone` binary
-under `Tools/<os>/` and prints a reminder if one isn't there yet — download
-it from https://rclone.org/downloads/ (Phase 4 only invokes it, it doesn't
-fetch it).
+under `Tools/<os>/`. The packaging scripts now download the current official
+`rclone` release automatically and refresh it in place, so the drive stays
+self-contained when you re-run packaging.
+
+If you are assembling a drive by hand instead of using the packaging scripts,
+copy the matching binary into:
+
+- `Tools/win/rclone.exe`
+- `Tools/mac/rclone`
+- `Tools/linux/rclone`
+
+Cloud Sync will not work until that binary exists on the USB drive.
 
 > Updating an existing USB drive is safe: the packaging scripts preserve
 > existing `Vault/`, `Apps/`, and `Tools/` content and only replace the

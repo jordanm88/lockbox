@@ -6,8 +6,10 @@ import {
   loadCloudConfig,
   onRcloneOutput,
   onSyncFinished,
+  onTestFinished,
   saveCloudConfig,
   syncVaultNow,
+  testCloudConnection,
 } from "../lib/cloudSyncBridge";
 
 type Provider = CloudRemoteConfig["provider"];
@@ -81,7 +83,9 @@ export default function CloudSync() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<"idle" | "ok" | "failed">("idle");
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
   const [output, setOutput] = useState<string[]>([]);
   const outputRef = useRef<HTMLDivElement>(null);
@@ -100,10 +104,15 @@ export default function CloudSync() {
     const finishedUnlisten = onSyncFinished((result) => {
       setSyncStatus(result.success ? "success" : "failed");
     });
+    const testFinishedUnlisten = onTestFinished((result) => {
+      setTesting(false);
+      setTestResult(result.success ? "ok" : "failed");
+    });
 
     return () => {
       outputUnlisten.then((unlisten) => unlisten());
       finishedUnlisten.then((unlisten) => unlisten());
+      testFinishedUnlisten.then((unlisten) => unlisten());
     };
   }, []);
 
@@ -148,7 +157,24 @@ export default function CloudSync() {
     }
   }
 
+  async function handleTestConnection() {
+    setTesting(true);
+    setTestResult("idle");
+    setOutput([]);
+    setError(null);
+    try {
+      await testCloudConnection(config);
+      setTestResult("ok");
+    } catch (err) {
+      setTestResult("failed");
+      setError(err instanceof Error ? err.message : "Connection test failed.");
+    } finally {
+      setTesting(false);
+    }
+  }
+
   const isRunning = syncStatus === "running";
+  const busy = isRunning || testing || saving || loading;
 
   return (
     <div>
@@ -236,6 +262,21 @@ export default function CloudSync() {
               <button type="button" onClick={handleSave} disabled={saving} className="neo-btn mt-2 bg-neo-green py-3 text-white">
                 {saving ? "Saving…" : saved ? "✓ Saved" : "💾 Save Connection"}
               </button>
+              <button
+                type="button"
+                onClick={handleTestConnection}
+                disabled={busy}
+                className="neo-btn bg-neo-yellow py-3"
+              >
+                {testing ? "Testing…" : "🧪 Test Connection"}
+              </button>
+              <p className="text-sm font-bold text-ink/70">
+                {testResult === "ok"
+                  ? "Connection OK"
+                  : testResult === "failed"
+                    ? "Connection failed"
+                    : "Run a test to validate credentials and remote path."}
+              </p>
             </div>
           )}
         </div>
@@ -249,7 +290,7 @@ export default function CloudSync() {
           <button
             type="button"
             onClick={handleSync}
-            disabled={isRunning || loading}
+            disabled={busy}
             className="neo-btn mb-4 bg-neo-blue py-3 text-white"
           >
             {isRunning ? "Syncing…" : "🔄 Sync Vault Now"}

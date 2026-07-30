@@ -1,7 +1,6 @@
 use crate::cloud_config::CloudRemoteConfig;
 use crate::usb_root;
 use serde::Serialize;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use tauri::{AppHandle, Emitter};
@@ -30,6 +29,13 @@ struct RcloneOutputLine {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SyncFinished {
+    success: bool,
+    code: Option<i32>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TestFinished {
     success: bool,
     code: Option<i32>,
 }
@@ -127,6 +133,84 @@ pub async fn run_rclone_sync(
         Ok(())
     } else {
         Err(format!("rclone exited with status {status}"))
+    }
+}
+
+/// Runs a lightweight remote connectivity check against the configured
+/// backend by listing one level from the remote target.
+pub async fn run_rclone_test(
+    app_handle: AppHandle,
+    root: PathBuf,
+    config: CloudRemoteConfig,
+) -> Result<(), String> {
+    let rclone_path = rclone_binary_path(&root);
+    if !rclone_path.is_file() {
+        return Err(format!(
+            "rclone binary not found at {} — place the platform build under Tools/",
+            rclone_path.display()
+        ));
+    }
+
+    let env_vars = {
+        let rclone_path = rclone_path.clone();
+        let config = config.clone();
+        tokio::task::spawn_blocking(move || build_remote_env(&rclone_path, REMOTE_NAME, &config))
+            .await
+            .map_err(|e| format!("internal error preparing rclone config: {e}"))??
+    };
+
+    let target = remote_target(REMOTE_NAME, &config);
+    let null_config_path = if cfg!(target_os = "windows") { "NUL" } else { "/dev/null" };
+
+    let mut command = tokio::process::Command::new(&rclone_path);
+    command
+        .arg("lsf")
+        .arg(&target)
+        .arg("--max-depth")
+        .arg("1")
+        .arg("--config")
+        .arg(null_config_path)
+        .envs(env_vars)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let mut child = command
+        .spawn()
+        .map_err(|e| format!("failed to start rclone test: {e}"))?;
+
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or("failed to capture rclone test stdout")?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or("failed to capture rclone test stderr")?;
+
+    let stdout_task = tokio::spawn(stream_lines(app_handle.clone(), stdout, "stdout"));
+    let stderr_task = tokio::spawn(stream_lines(app_handle.clone(), stderr, "stderr"));
+
+    let status = child
+        .wait()
+        .await
+        .map_err(|e| format!("rclone test process error: {e}"))?;
+
+    let _ = stdout_task.await;
+    let _ = stderr_task.await;
+
+    let _ = app_handle.emit(
+        "rclone-test-finished",
+        TestFinished {
+            success: status.success(),
+            code: status.code(),
+        },
+    );
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("rclone test exited with status {status}"))
     }
 }
 
@@ -257,41 +341,14 @@ fn build_remote_env(
 
 /// rclone requires password-type config fields (webdav/ftp `pass`) to be in
 /// its "obscured" form — a reversible obfuscation, not real encryption, that
-/// just keeps the value from being a bare plaintext string. `rclone obscure -`
-/// reads the plaintext from stdin so it's never passed as a CLI argument
-/// (which other local processes could read off the command line).
-///
-/// Note: this relies on `rclone obscure` accepting `-` for stdin input,
-/// which matches the stdin convention rclone uses elsewhere (`rclone cat -`,
-/// etc). Verify against `rclone help obscure` for the exact rclone version
-/// you embed if this doesn't behave as expected — it could not be tested
-/// against a real rclone binary in this environment.
+/// keeps the value from being stored as a plain string in config values.
 fn obscure_password(rclone_path: &Path, plaintext: &str) -> Result<String, String> {
-    let mut child = std::process::Command::new(rclone_path)
+    let output = std::process::Command::new(rclone_path)
         .arg("obscure")
-        .arg("-")
-        .stdin(Stdio::piped())
+        .arg(plaintext)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("failed to run rclone obscure: {e}"))?;
-
-    {
-        // `.take()`, not `.as_mut()` — the child reads until EOF, and EOF
-        // only happens once this end of the pipe is actually closed, which
-        // requires the ChildStdin handle itself to be dropped (not just the
-        // borrow), hence taking ownership and letting it drop at block end.
-        let mut stdin = child
-            .stdin
-            .take()
-            .ok_or("failed to open rclone obscure stdin")?;
-        stdin
-            .write_all(plaintext.as_bytes())
-            .map_err(|e| format!("failed to write password to rclone obscure: {e}"))?;
-    }
-
-    let output = child
-        .wait_with_output()
+        .output()
         .map_err(|e| format!("rclone obscure failed: {e}"))?;
 
     if !output.status.success() {

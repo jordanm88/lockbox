@@ -41,7 +41,67 @@ fn config_path(vault_dir: &Path) -> PathBuf {
     vault_dir.join(CLOUD_CONFIG_RELATIVE_PATH)
 }
 
+pub fn validate(config: &CloudRemoteConfig) -> Result<(), String> {
+    match config {
+        CloudRemoteConfig::S3 {
+            bucket,
+            access_key_id,
+            secret_access_key,
+            ..
+        } => {
+            if bucket.trim().is_empty() {
+                return Err("S3 bucket is required".to_string());
+            }
+            if access_key_id.trim().is_empty() {
+                return Err("S3 access key id is required".to_string());
+            }
+            if secret_access_key.trim().is_empty() {
+                return Err("S3 secret access key is required".to_string());
+            }
+        }
+        CloudRemoteConfig::WebDav {
+            url,
+            username,
+            password,
+            ..
+        } => {
+            let normalized = url.trim();
+            if normalized.is_empty() {
+                return Err("WebDAV server URL is required".to_string());
+            }
+            if !(normalized.starts_with("http://") || normalized.starts_with("https://")) {
+                return Err("WebDAV URL must start with http:// or https://".to_string());
+            }
+            if username.trim().is_empty() {
+                return Err("WebDAV username is required".to_string());
+            }
+            if password.is_empty() {
+                return Err("WebDAV password is required".to_string());
+            }
+        }
+        CloudRemoteConfig::Ftp {
+            host,
+            username,
+            password,
+            ..
+        } => {
+            if host.trim().is_empty() {
+                return Err("FTP host is required".to_string());
+            }
+            if username.trim().is_empty() {
+                return Err("FTP username is required".to_string());
+            }
+            if password.is_empty() {
+                return Err("FTP password is required".to_string());
+            }
+        }
+    }
+
+    Ok(())
+}
+
 pub fn save(vault_dir: &Path, key: &VaultKey, config: &CloudRemoteConfig) -> Result<(), String> {
+    validate(config)?;
     let json = serde_json::to_vec(config)
         .map_err(|e| format!("failed to serialize cloud config: {e}"))?;
     let sealed = crypto::encrypt_bytes(key, &json)?;

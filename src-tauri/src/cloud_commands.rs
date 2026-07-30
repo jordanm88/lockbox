@@ -41,6 +41,29 @@ pub async fn sync_vault_now(app_handle: AppHandle, state: State<'_, AppState>) -
     result
 }
 
+#[tauri::command]
+pub async fn test_cloud_connection(
+    app_handle: AppHandle,
+    state: State<'_, AppState>,
+    config: CloudRemoteConfig,
+) -> Result<(), String> {
+    cloud_config::validate(&config)?;
+
+    {
+        let mut in_progress = lock_recover(&state.sync_in_progress);
+        if *in_progress {
+            return Err("a sync/test operation is already running".to_string());
+        }
+        *in_progress = true;
+    }
+
+    let root = state.root.clone();
+    let result = rclone::run_rclone_test(app_handle, root, config).await;
+
+    *lock_recover(&state.sync_in_progress) = false;
+    result
+}
+
 async fn sync_vault_now_inner(app_handle: &AppHandle, state: &State<'_, AppState>) -> Result<(), String> {
     let root = state.root.clone();
 

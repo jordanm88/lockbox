@@ -33,6 +33,6 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": ["Resources/catalog.json", "Resources/catalog.schema.json"]
+    "resources": ["resources/catalog.json", "resources/catalog.schema.json", "resources/update.config.json"]
   }
 }

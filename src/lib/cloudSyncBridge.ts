@@ -37,6 +37,11 @@ export interface SyncFinished {
   code: number | null;
 }
 
+export interface TestFinished {
+  success: boolean;
+  code: number | null;
+}
+
 export function saveCloudConfig(config: CloudRemoteConfig): Promise<void> {
   return invoke<void>("save_cloud_config", { config });
 }
@@ -49,10 +54,18 @@ export function syncVaultNow(): Promise<void> {
   return invoke<void>("sync_vault_now");
 }
 
+export function testCloudConnection(config: CloudRemoteConfig): Promise<void> {
+  return invoke<void>("test_cloud_connection", { config });
+}
+
 export function onRcloneOutput(handler: (line: RcloneOutputLine) => void): Promise<UnlistenFn> {
   return listen<RcloneOutputLine>("rclone-output", (event) => handler(event.payload));
 }
 
 export function onSyncFinished(handler: (result: SyncFinished) => void): Promise<UnlistenFn> {
   return listen<SyncFinished>("rclone-sync-finished", (event) => handler(event.payload));
+}
+
+export function onTestFinished(handler: (result: TestFinished) => void): Promise<UnlistenFn> {
+  return listen<TestFinished>("rclone-test-finished", (event) => handler(event.payload));
 }

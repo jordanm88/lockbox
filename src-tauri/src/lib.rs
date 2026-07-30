@@ -45,6 +45,7 @@ pub fn run() {
             cloud_commands::save_cloud_config,
             cloud_commands::load_cloud_config,
             cloud_commands::sync_vault_now,
+            cloud_commands::test_cloud_connection,
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| fatal_startup_error(&format!("Tauri failed to start: {e}")));

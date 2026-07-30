@@ -127,6 +127,18 @@ export default function Settings({ onLock }: SettingsProps) {
               </button>
             </div>
           </div>
+
+          <div className="mt-6 border-t-2 pt-4">
+            <h3 className="mb-3 text-xl font-black uppercase">Privacy Mode Transparency</h3>
+            <div className="neo-card bg-paper p-4 text-sm text-ink/80">
+              <p className="font-bold">Portable from USB (recommended):</p>
+              <p>Lockbox stores Vault and Apps on the USB drive, not in your profile folders by design.</p>
+              <p className="mt-2 font-bold">Expected host traces:</p>
+              <p>Operating system execution logs, security scan metadata, and runtime cache artifacts may still exist on the host machine.</p>
+              <p className="mt-2 font-bold">MSI install:</p>
+              <p>Adds normal installer breadcrumbs such as uninstall entries, shortcuts, and installer metadata on the host.</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

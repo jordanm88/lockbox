@@ -320,6 +320,36 @@ fn get_entry_for_path_mut<'a>(index: &'a mut VaultIndex, path: &str) -> Option<&
     index.entries.iter_mut().find(|entry| entry.original_path == path)
 }
 
+fn prune_empty_directories(index: &mut VaultIndex) {
+    loop {
+        let mut removed_any = false;
+
+        let mut i = 0usize;
+        while i < index.entries.len() {
+            if !index.entries[i].is_dir {
+                i += 1;
+                continue;
+            }
+
+            let dir = index.entries[i].original_path.clone();
+            let has_children = index.entries.iter().enumerate().any(|(j, entry)| {
+                j != i && entry.original_path.starts_with(&format!("{dir}/"))
+            });
+
+            if !has_children {
+                index.entries.remove(i);
+                removed_any = true;
+            } else {
+                i += 1;
+            }
+        }
+
+        if !removed_any {
+            break;
+        }
+    }
+}
+
 fn normalize_relative_path(path: &str) -> Result<String, String> {
     let normalized = Path::new(path);
     if normalized.as_os_str().is_empty() {
@@ -456,6 +486,8 @@ pub fn delete_vault_entry(state: State<AppState>, relative_path: String) -> Resu
         }
         index.entries.remove(idx);
     }
+
+    prune_empty_directories(&mut index);
 
     save_index(&vault_dir, key, &index)?;
     Ok(())

@@ -9,7 +9,7 @@
       "homepage": "https://www.sumatrapdfreader.org/free-pdf-reader",
       "targets": {
         "windows": {
-          "url": "https://www.sumatrapdfreader.org/dl2/SumatraPDF-3.5.2-64.zip",
+          "url": "https://www.sumatrapdfreader.org/dl/rel/3.6.1/SumatraPDF-3.6.1-64.zip",
           "archiveType": "zip",
           "launcher": "SumatraPDF.exe"
         }

@@ -207,6 +207,10 @@ export default function CloudSync() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="neo-panel bg-paper p-6">
           <p className="mb-3 text-sm font-semibold text-slate-600">Provider</p>
+          <p className="mb-4 text-sm text-slate-600">
+            Cloud sync uses a local <span className="font-semibold text-ink">rclone</span> binary from the USB drive. Put
+            <span className="font-semibold text-ink"> Tools/win/rclone.exe</span> on Windows (or <span className="font-semibold text-ink">Tools/mac/rclone</span> / <span className="font-semibold text-ink">Tools/linux/rclone</span> on those platforms).
+          </p>
           <div className="mb-6 flex flex-wrap gap-3">
             {PROVIDERS.map((option) => (
               <button

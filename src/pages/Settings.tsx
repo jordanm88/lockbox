@@ -1,5 +1,8 @@
 import { useState } from "react";
 import PageHeader from "../components/PageHeader";
+import { useEffect } from "react";
+import { getLatestRelease } from "../lib/updateBridge";
+import pkg from "../../package.json";
 
 const AUTO_LOCK_OPTIONS = ["1 minute", "5 minutes", "15 minutes", "Never"];
 
@@ -12,6 +15,32 @@ export default function Settings({ onLock }: SettingsProps) {
   const [newPass, setNewPass] = useState("");
   const [confirmPass, setConfirmPass] = useState("");
   const [autoLock, setAutoLock] = useState(AUTO_LOCK_OPTIONS[1]);
+  const [autoUpdate, setAutoUpdate] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("autoUpdateEnabled") === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    if (!autoUpdate) return;
+    (async () => {
+      try {
+        const rel = await getLatestRelease();
+        const latestTag = rel.tag_name as string;
+        const current = pkg.version;
+        if (latestTag && latestTag !== current) {
+          // automatically open release page when auto-update is enabled
+          const url = rel.html_url as string;
+          if (url) window.open(url, "_blank");
+        }
+      } catch (e) {
+        // ignore errors silently
+        console.debug("update check failed", e);
+      }
+    })();
+  }, [autoUpdate]);
 
   return (
     <div>
@@ -75,6 +104,28 @@ export default function Settings({ onLock }: SettingsProps) {
             <button type="button" onClick={onLock} className="neo-btn w-full bg-neo-red py-3 text-white">
               🔒 Lock Vault Now
             </button>
+          </div>
+          <div className="mt-6 border-t-2 pt-4">
+            <h3 className="mb-3 text-xl font-black uppercase">Updates</h3>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="font-black uppercase">Auto-check for updates</div>
+                <div className="text-sm text-ink/60">When enabled, Lockbox will check GitHub releases and open the release page automatically.</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !autoUpdate;
+                  setAutoUpdate(next);
+                  try {
+                    localStorage.setItem("autoUpdateEnabled", next ? "true" : "false");
+                  } catch {}
+                }}
+                className={`neo-btn py-2 px-4 ${autoUpdate ? "bg-neo-yellow" : "bg-paper"}`}
+              >
+                {autoUpdate ? "On" : "Off"}
+              </button>
+            </div>
           </div>
         </div>
       </div>

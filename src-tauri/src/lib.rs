@@ -9,6 +9,7 @@ mod rclone;
 mod state;
 mod store_commands;
 mod usb_root;
+mod updates;
 
 use state::AppState;
 use std::collections::HashSet;
@@ -38,6 +39,7 @@ pub fn run() {
             store_commands::get_app_catalog,
             store_commands::install_app,
             store_commands::launch_portable_app,
+            updates::get_latest_release,
             cloud_commands::save_cloud_config,
             cloud_commands::load_cloud_config,
             cloud_commands::sync_vault_now,

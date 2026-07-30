@@ -7,6 +7,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'If true, create a draft GitHub release with the build artifacts (disabled by default)'
+        required: false
+        default: 'false'
 
 jobs:
   build:
@@ -91,6 +96,22 @@ jobs:
           path: artifacts
 
       - name: Create draft GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: artifacts/**/*
+
+  publish_optional:
+    needs: build
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.publish_release == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create draft GitHub release (manual publish)
         uses: softprops/action-gh-release@v2
         with:
           draft: true

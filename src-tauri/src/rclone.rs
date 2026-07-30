@@ -52,16 +52,6 @@ pub async fn run_rclone_sync(
     let rclone_path = resolve_rclone_binary(&root)?;
 
     let vault_dir = usb_root::vault_dir(&root);
-    // `rclone sync` mirrors source onto dest, deleting anything in dest that
-    // isn't in source. An empty (or inaccessible) Vault would make it wipe
-    // out the entire existing remote backup — refuse outright rather than
-    // risk that, before spending any time on the download/obscure work below.
-    if !vault_has_content(&vault_dir)? {
-        return Err(
-            "Vault is empty — refusing to sync (this would erase the existing remote backup). Add files to the vault first.".to_string(),
-        );
-    }
-
     // Building the RCLONE_CONFIG_* env vars can shell out to `rclone obscure`
     // for password fields, which is a blocking subprocess call — keep it off
     // the async executor thread.
@@ -77,6 +67,33 @@ pub async fn run_rclone_sync(
     // Force rclone to use only the remote we defined via env vars, never
     // whatever config file (if any) happens to exist on the host.
     let null_config_path = if cfg!(target_os = "windows") { "NUL" } else { "/dev/null" };
+
+    // `rclone sync` mirrors source onto dest, deleting anything in dest that
+    // isn't in source. If the local vault is empty, only allow this to
+    // continue when the remote target is also empty (first-time setup).
+    if !vault_has_content(&vault_dir)? {
+        if remote_has_content(
+            &rclone_path,
+            &env_vars,
+            &target,
+            null_config_path,
+        )
+        .await?
+        {
+            return Err(
+                "Vault is empty — refusing to sync because the remote already has data and a sync would erase it. Add files to the vault first, or clear the remote path and retry.".to_string(),
+            );
+        }
+
+        let _ = app_handle.emit(
+            "rclone-output",
+            RcloneOutputLine {
+                stream: "stdout",
+                line: "Vault and remote path are both empty. Skipping sync as no data needs transfer.".to_string(),
+            },
+        );
+        return Ok(());
+    }
 
     let mut command = tokio::process::Command::new(&rclone_path);
     command
@@ -215,6 +232,38 @@ fn vault_has_content(vault_dir: &Path) -> Result<bool, String> {
         }
     }
     Ok(false)
+}
+
+async fn remote_has_content(
+    rclone_path: &Path,
+    env_vars: &[(String, String)],
+    target: &str,
+    null_config_path: &str,
+) -> Result<bool, String> {
+    let output = tokio::process::Command::new(rclone_path)
+        .arg("lsf")
+        .arg(target)
+        .arg("--max-depth")
+        .arg("1")
+        .arg("--config")
+        .arg(null_config_path)
+        .envs(env_vars.iter().cloned())
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .map_err(|e| format!("failed to inspect remote target: {e}"))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "failed to inspect remote target before sync: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+
+    let listed = String::from_utf8_lossy(&output.stdout);
+    Ok(listed.lines().any(|line| !line.trim().is_empty()))
 }
 
 async fn stream_lines<R>(app_handle: AppHandle, reader: R, stream_name: &'static str)

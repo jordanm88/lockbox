@@ -66,7 +66,7 @@ export default function VaultTreeView({ entries, onView, onDelete }: Props) {
   return (
     <div className="space-y-4">
       <div className="neo-panel overflow-hidden">
-        <div className="flex flex-col gap-4 border-b border-slate-200/80 bg-gradient-to-r from-white to-slate-50 px-4 py-4 sm:px-5 sm:py-5">
+        <div className="flex flex-col gap-4 border-b border-slate-200/80 bg-white px-4 py-4 sm:px-5 sm:py-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Drive-style browser</p>
@@ -87,12 +87,6 @@ export default function VaultTreeView({ entries, onView, onDelete }: Props) {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-600">Folders first</span>
-            <span className="rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-600">Click a folder to open</span>
-            <span className="rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-600">Click a file to preview</span>
-          </div>
-
           <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
             <button type="button" onClick={() => setCurrentPath("")} className="font-medium text-neo-blue hover:underline">
               Vault Root
@@ -111,65 +105,75 @@ export default function VaultTreeView({ entries, onView, onDelete }: Props) {
           </div>
         </div>
 
-        <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 sm:p-5">
-          {rows.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 py-12 text-center text-sm font-medium text-slate-600 sm:col-span-full">
-              This folder is empty.
+        <div className="overflow-x-auto">
+          <div className="min-w-[760px]">
+            <div className="grid grid-cols-[minmax(0,1fr)_120px_110px_160px] gap-4 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              <div>Name</div>
+              <div>Type</div>
+              <div className="text-right">Size</div>
+              <div className="text-right">Actions</div>
             </div>
-          ) : (
-            rows.map((row) => {
-              const full = rowEntryMap.get(row.fullPath);
-              if (!full) return null;
 
-              const tone = row.isDir
-                ? "border-sky-200 bg-sky-50/70 hover:border-sky-300 hover:bg-sky-50"
-                : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
-;
+            {rows.length === 0 ? (
+              <div className="px-5 py-14 text-center text-sm font-medium text-slate-600">This folder is empty.</div>
+            ) : (
+              <div className="divide-y divide-slate-200">
+                {rows.map((row) => {
+                  const full = rowEntryMap.get(row.fullPath);
+                  if (!full) return null;
 
-              return (
-                <div
-                  key={row.fullPath}
-                  className={`group flex min-h-[172px] flex-col justify-between rounded-2xl border p-4 shadow-sm transition duration-150 hover:-translate-y-0.5 hover:shadow-lg ${tone}`}
-                  style={{ paddingLeft: `${1 + Math.min(row.depth, 4) * 0.5}rem` }}
-                >
-                  <button
-                    type="button"
-                    onClick={row.isDir ? () => setCurrentPath(row.fullPath) : () => onView(full)}
-                    className="flex flex-1 flex-col items-start text-left"
-                  >
-                    <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-2xl shadow-sm ring-1 ring-slate-200">
-                      {row.isDir ? "📁" : "📄"}
-                    </div>
-                    <p className="w-full truncate text-base font-semibold text-ink">{row.name}</p>
-                    <p className="mt-1 text-sm text-slate-600">{row.isDir ? "Folder" : `${row.size} bytes`}</p>
-                    <p className="mt-3 line-clamp-2 text-sm text-slate-500">
-                      {row.isDir ? "Open to browse the contents inside." : "Open to preview the decrypted file in a focused viewer."}
-                    </p>
-                  </button>
-
-                  <div className="mt-4 flex items-center justify-between gap-3">
-                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${row.isDir ? "bg-sky-100 text-sky-800" : "bg-slate-100 text-slate-700"}`}>
-                      {row.isDir ? "Folder" : "File"}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      {row.isDir ? (
-                        <button type="button" onClick={() => setCurrentPath(row.fullPath)} className="neo-btn px-3 py-2 text-sm">
-                          Open
-                        </button>
-                      ) : (
-                        <button type="button" onClick={() => onView(full)} className="neo-btn px-3 py-2 text-sm">
-                          View
-                        </button>
-                      )}
-                      <button type="button" onClick={() => onDelete(full)} className="neo-btn border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 hover:bg-rose-100">
-                        Delete
+                  return (
+                    <div
+                      key={row.fullPath}
+                      className={`grid grid-cols-[minmax(0,1fr)_120px_110px_160px] items-center gap-4 px-5 py-3.5 transition hover:bg-slate-50 ${row.isDir ? "bg-sky-50/40" : "bg-white"}`}
+                      style={{ paddingLeft: `${1.25 + Math.min(row.depth, 4) * 0.25}rem` }}
+                    >
+                      <button
+                        type="button"
+                        onClick={row.isDir ? () => setCurrentPath(row.fullPath) : () => onView(full)}
+                        className="flex min-w-0 items-center gap-3 text-left"
+                      >
+                        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ${row.isDir ? "bg-sky-100 text-sky-700 ring-sky-200" : "bg-slate-100 text-slate-700 ring-slate-200"}`}>
+                          {row.isDir ? "📁" : "📄"}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-ink">{row.name}</p>
+                          <p className="truncate text-sm text-slate-500">
+                            {row.isDir ? "Open folder" : "Preview file"}
+                          </p>
+                        </div>
                       </button>
+
+                      <div className="flex items-center gap-2">
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${row.isDir ? "bg-sky-100 text-sky-800" : "bg-slate-100 text-slate-700"}`}>
+                          {row.isDir ? "Folder" : "File"}
+                        </span>
+                      </div>
+
+                      <div className="text-right text-sm text-slate-600">
+                        {row.isDir ? "—" : `${Math.max(1, Math.ceil(row.size / 1024))} KB`}
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2">
+                        {row.isDir ? (
+                          <button type="button" onClick={() => setCurrentPath(row.fullPath)} className="neo-btn px-3 py-2 text-sm">
+                            Open
+                          </button>
+                        ) : (
+                          <button type="button" onClick={() => onView(full)} className="neo-btn px-3 py-2 text-sm">
+                            View
+                          </button>
+                        )}
+                        <button type="button" onClick={() => onDelete(full)} className="neo-btn border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 hover:bg-rose-100">
+                          Delete
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              );
-            })
-          )}
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

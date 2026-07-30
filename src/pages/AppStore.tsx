@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import PageHeader from "../components/PageHeader";
+import ActionButton from "../components/ActionButton";
+import ConfirmDialog from "../components/ConfirmDialog";
+import pkg from "../../package.json";
 import {
   CatalogEntry,
   getAppCatalog,
@@ -79,6 +82,28 @@ export default function AppStore() {
     }
   }
 
+  // Confirmation dialog state
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<CatalogEntry | null>(null);
+
+  function requestInstall(entry: CatalogEntry) {
+    setConfirmTarget(entry);
+    setConfirmOpen(true);
+  }
+
+  function confirmInstall() {
+    if (confirmTarget) handleInstall(confirmTarget);
+    setConfirmTarget(null);
+    setConfirmOpen(false);
+  }
+
+  function cancelInstall() {
+    setConfirmTarget(null);
+    setConfirmOpen(false);
+  }
+
+  // package version available as `pkg.version`
+
   async function handleLaunch(entry: CatalogEntry) {
     if (!entry.launcherPath) return;
     setError(null);
@@ -144,35 +169,25 @@ export default function AppStore() {
                 )}
 
                 {!app.available ? (
-                  <button type="button" disabled className="neo-btn py-3">
+                  <ActionButton type="button" disabled className="w-full">
                     Unavailable on this OS
-                  </button>
+                  </ActionButton>
                 ) : app.installed ? (
-                  <button
-                    type="button"
-                    onClick={() => handleLaunch(app)}
-                    className="neo-btn bg-neo-blue py-3 text-white"
-                  >
+                  <ActionButton type="button" onClick={() => handleLaunch(app)} variant="primary" className="w-full">
                     ▶ Launch
-                  </button>
+                  </ActionButton>
                 ) : (
                   <div className="flex gap-2">
-                    <button
+                    <ActionButton
                       type="button"
-                      onClick={() => handleInstall(app)}
+                      onClick={() => requestInstall(app)}
                       disabled={isInstalling}
-                      className="neo-btn bg-neo-green py-3"
+                      variant="primary"
                     >
                       {isInstalling ? "Installing…" : "⬇ Install"}
-                    </button>
+                    </ActionButton>
                     {app.homepage && (
-                      <button
-                        type="button"
-                        onClick={() => app.homepage && window.open(app.homepage, "_blank")}
-                        className="neo-btn py-3"
-                      >
-                        Info
-                      </button>
+                      <ActionButton type="button" onClick={() => app.homepage && window.open(app.homepage, "_blank")}>Info</ActionButton>
                     )}
                   </div>
                 )}
@@ -181,6 +196,18 @@ export default function AppStore() {
           })}
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title={confirmTarget ? `Install ${confirmTarget.name}?` : "Install"}
+        description={confirmTarget ? confirmTarget.description : undefined}
+        confirmLabel="Install"
+        cancelLabel="Cancel"
+        onConfirm={confirmInstall}
+        onCancel={cancelInstall}
+      />
+
+      <footer className="mt-8 text-center text-sm text-ink/60">Version {pkg.version}</footer>
     </div>
   );
 }

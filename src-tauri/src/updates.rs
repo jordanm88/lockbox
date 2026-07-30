@@ -1,6 +1,7 @@
 use serde_json::Value;
 use std::fs;
 use tauri::AppHandle;
+use tauri::Manager;
 
 #[tauri::command]
 pub fn get_latest_release(app_handle: AppHandle) -> Result<Value, String> {

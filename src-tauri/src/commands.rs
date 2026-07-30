@@ -1,8 +1,7 @@
 use crate::state::{lock_recover, AppState};
-use crate::{crypto, paths, usb_root};
+use crate::{crypto, usb_root};
 use rand::{rngs::OsRng, RngCore};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::State;

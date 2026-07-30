@@ -1,0 +1,258 @@
+use crate::catalog::{self, ArchiveType, TargetSpec};
+use crate::{paths, usb_root};
+use serde::Serialize;
+use sha2::{Digest, Sha256};
+use std::fs::File;
+use std::io::{Cursor, Read};
+use std::path::Path;
+use std::time::{Duration, Instant};
+use tauri::{AppHandle, Emitter};
+
+const DOWNLOAD_TIMEOUT_SECS: u64 = 600;
+const PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(120);
+/// Generous cap for a portable app archive — mainly a guard against a
+/// misconfigured or compromised catalog entry pointing at something huge (or
+/// infinite, e.g. a misbehaving server) and exhausting RAM, since the whole
+/// download is buffered in memory before extraction.
+const MAX_DOWNLOAD_BYTES: u64 = 4 * 1024 * 1024 * 1024;
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InstallProgress {
+    app_id: String,
+    downloaded_bytes: u64,
+    total_bytes: Option<u64>,
+    stage: &'static str,
+}
+
+fn emit_progress(
+    app_handle: &AppHandle,
+    app_id: &str,
+    downloaded: u64,
+    total: Option<u64>,
+    stage: &'static str,
+) {
+    let _ = app_handle.emit(
+        "app-install-progress",
+        InstallProgress {
+            app_id: app_id.to_string(),
+            downloaded_bytes: downloaded,
+            total_bytes: total,
+            stage,
+        },
+    );
+}
+
+pub fn install_app(app_handle: &AppHandle, root: &Path, app_id: &str) -> Result<(), String> {
+    let catalog = catalog::load_catalog(app_handle)?;
+    let app = catalog
+        .apps
+        .into_iter()
+        .find(|a| a.id == app_id)
+        .ok_or_else(|| format!("unknown app '{app_id}'"))?;
+    let target = app
+        .targets
+        .for_current_os()
+        .ok_or_else(|| format!("'{app_id}' has no build for this operating system"))?
+        .clone();
+
+    let install_dir = usb_root::apps_dir(root).join(&app.id);
+
+    // Always start from a clean directory: this discards any stale files
+    // left over from a previous version of this app, and it gives failure
+    // handling below a simple story — on any error past this point we just
+    // remove the directory again, so the app ends up either fully installed
+    // or entirely absent, never confusingly half-installed.
+    if install_dir.exists() {
+        std::fs::remove_dir_all(&install_dir)
+            .map_err(|e| format!("failed to clear previous install: {e}"))?;
+    }
+    std::fs::create_dir_all(&install_dir)
+        .map_err(|e| format!("failed to create app directory: {e}"))?;
+
+    if let Err(e) = install_app_inner(app_handle, &app.id, &target, &install_dir) {
+        let _ = std::fs::remove_dir_all(&install_dir);
+        return Err(e);
+    }
+
+    Ok(())
+}
+
+fn install_app_inner(
+    app_handle: &AppHandle,
+    app_id: &str,
+    target: &TargetSpec,
+    install_dir: &Path,
+) -> Result<(), String> {
+    let bytes = download_with_progress(app_handle, app_id, target)?;
+
+    if let Some(expected) = &target.sha256 {
+        verify_sha256(&bytes, expected)?;
+    }
+
+    emit_progress(
+        app_handle,
+        app_id,
+        bytes.len() as u64,
+        Some(bytes.len() as u64),
+        "extracting",
+    );
+
+    match target.archive_type {
+        ArchiveType::Zip => extract_zip(&bytes, install_dir)?,
+        ArchiveType::TarGz => extract_tar_gz(&bytes, install_dir)?,
+        ArchiveType::Appimage => install_single_file(&bytes, install_dir, &target.launcher)?,
+    }
+
+    emit_progress(
+        app_handle,
+        app_id,
+        bytes.len() as u64,
+        Some(bytes.len() as u64),
+        "done",
+    );
+    Ok(())
+}
+
+fn download_with_progress(
+    app_handle: &AppHandle,
+    app_id: &str,
+    target: &TargetSpec,
+) -> Result<Vec<u8>, String> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(DOWNLOAD_TIMEOUT_SECS))
+        .build()
+        .map_err(|e| format!("failed to build download client: {e}"))?;
+
+    let mut response = client
+        .get(&target.url)
+        .send()
+        .map_err(|e| format!("download failed: {e}"))?
+        .error_for_status()
+        .map_err(|e| format!("download failed: {e}"))?;
+
+    let total = response.content_length();
+    if total.is_some_and(|size| size > MAX_DOWNLOAD_BYTES) {
+        return Err(format!(
+            "refusing to download {app_id}: reported size exceeds the {}GB limit",
+            MAX_DOWNLOAD_BYTES / (1024 * 1024 * 1024)
+        ));
+    }
+
+    let mut buffer = Vec::new();
+    let mut chunk = [0u8; 64 * 1024];
+    let mut downloaded: u64 = 0;
+    let mut last_emit = Instant::now();
+
+    loop {
+        let read = response
+            .read(&mut chunk)
+            .map_err(|e| format!("download failed: {e}"))?;
+        if read == 0 {
+            break;
+        }
+        buffer.extend_from_slice(&chunk[..read]);
+        downloaded += read as u64;
+
+        // Backstop for when content-length was absent or understated —
+        // stop pulling data from a runaway/misbehaving server rather than
+        // growing `buffer` without bound.
+        if downloaded > MAX_DOWNLOAD_BYTES {
+            return Err(format!(
+                "aborting download of {app_id}: exceeded the {}GB limit",
+                MAX_DOWNLOAD_BYTES / (1024 * 1024 * 1024)
+            ));
+        }
+
+        if last_emit.elapsed() > PROGRESS_EMIT_INTERVAL {
+            emit_progress(app_handle, app_id, downloaded, total, "downloading");
+            last_emit = Instant::now();
+        }
+    }
+
+    emit_progress(app_handle, app_id, downloaded, total, "downloading");
+    Ok(buffer)
+}
+
+fn verify_sha256(bytes: &[u8], expected_hex: &str) -> Result<(), String> {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    let actual_hex = hex::encode(hasher.finalize());
+    if !actual_hex.eq_ignore_ascii_case(expected_hex) {
+        return Err("downloaded file failed integrity check (SHA-256 mismatch)".to_string());
+    }
+    Ok(())
+}
+
+fn extract_zip(bytes: &[u8], dest: &Path) -> Result<(), String> {
+    let cursor = Cursor::new(bytes);
+    let mut archive =
+        zip::ZipArchive::new(cursor).map_err(|e| format!("invalid zip archive: {e}"))?;
+
+    for i in 0..archive.len() {
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|e| format!("failed to read zip entry: {e}"))?;
+
+        // `enclosed_name` returns None for any entry whose path contains
+        // `..` or an absolute/drive-rooted component instead of silently
+        // rewriting it — rejecting those outright is what stops a
+        // malicious archive from writing outside `dest` ("zip slip").
+        let relative_name = entry
+            .enclosed_name()
+            .ok_or_else(|| format!("zip entry has an unsafe path: {}", entry.name()))?;
+        let out_path = dest.join(relative_name);
+
+        if entry.is_dir() {
+            std::fs::create_dir_all(&out_path)
+                .map_err(|e| format!("failed to create directory: {e}"))?;
+            continue;
+        }
+
+        if let Some(parent) = out_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("failed to create directory: {e}"))?;
+        }
+
+        let mode = entry.unix_mode();
+        let mut out_file = File::create(&out_path)
+            .map_err(|e| format!("failed to write {}: {e}", out_path.display()))?;
+        std::io::copy(&mut entry, &mut out_file)
+            .map_err(|e| format!("failed to extract {}: {e}", out_path.display()))?;
+
+        apply_unix_permissions(&out_path, mode);
+    }
+
+    Ok(())
+}
+
+fn extract_tar_gz(bytes: &[u8], dest: &Path) -> Result<(), String> {
+    let gz = flate2::read::GzDecoder::new(Cursor::new(bytes));
+    let mut archive = tar::Archive::new(gz);
+    archive
+        .unpack(dest)
+        .map_err(|e| format!("failed to extract tar.gz archive: {e}"))
+}
+
+fn install_single_file(bytes: &[u8], dest_dir: &Path, launcher_name: &str) -> Result<(), String> {
+    let dest_path = paths::safe_join(dest_dir, launcher_name)?;
+    if let Some(parent) = dest_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("failed to create directory: {e}"))?;
+    }
+    std::fs::write(&dest_path, bytes)
+        .map_err(|e| format!("failed to write {}: {e}", dest_path.display()))?;
+    apply_unix_permissions(&dest_path, Some(0o755));
+    Ok(())
+}
+
+#[cfg(unix)]
+fn apply_unix_permissions(path: &Path, mode: Option<u32>) {
+    use std::os::unix::fs::PermissionsExt;
+    if let Some(mode) = mode {
+        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode));
+    }
+}
+
+#[cfg(not(unix))]
+fn apply_unix_permissions(_path: &Path, _mode: Option<u32>) {}

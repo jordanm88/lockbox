@@ -1,0 +1,97 @@
+name: Build Lockbox
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Only Ubuntu's bare runner image is missing Tauri's system libs —
+      # windows-latest ships MSVC and macos-latest ships Xcode CLT already.
+      # Package names are current for Tauri v2 on Ubuntu 22.04+; adjust if
+      # the runner's Ubuntu version moves and these get renamed again.
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libxdo-dev \
+            patchelf \
+            build-essential \
+            curl \
+            wget \
+            file
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri"
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Type-check frontend
+        run: npx tsc --noEmit
+
+      # Plain `tauri build`, not tauri-action — keeps this job's only
+      # responsibility "produce bundles for this OS", with no dependence on
+      # GitHub-release-specific behavior that's harder to verify locally.
+      - name: Build Tauri app
+        run: npm run tauri -- build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lockbox-${{ matrix.platform }}
+          path: |
+            src-tauri/target/release/bundle/
+            src-tauri/target/release/lockbox
+            src-tauri/target/release/lockbox.exe
+          if-no-files-found: warn
+          retention-days: 14
+
+  # Only runs when a v* tag is pushed — ordinary pushes/PRs just build and
+  # stop at the artifacts above. Attaches every platform's raw build output
+  # to a draft release; run scripts/package-usb.* locally afterward to turn
+  # a downloaded artifact into an actual USB layout (see docs/DISTRIBUTION.md).
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create draft GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: artifacts/**/*

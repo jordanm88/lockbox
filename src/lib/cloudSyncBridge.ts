@@ -1,0 +1,58 @@
+import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+
+export type CloudRemoteConfig =
+  | {
+      provider: "s3";
+      endpoint: string | null;
+      region: string | null;
+      bucket: string;
+      accessKeyId: string;
+      secretAccessKey: string;
+      remotePath: string;
+    }
+  | {
+      provider: "webdav";
+      url: string;
+      username: string;
+      password: string;
+      remotePath: string;
+    }
+  | {
+      provider: "ftp";
+      host: string;
+      port: number | null;
+      username: string;
+      password: string;
+      remotePath: string;
+    };
+
+export interface RcloneOutputLine {
+  stream: "stdout" | "stderr";
+  line: string;
+}
+
+export interface SyncFinished {
+  success: boolean;
+  code: number | null;
+}
+
+export function saveCloudConfig(config: CloudRemoteConfig): Promise<void> {
+  return invoke<void>("save_cloud_config", { config });
+}
+
+export function loadCloudConfig(): Promise<CloudRemoteConfig | null> {
+  return invoke<CloudRemoteConfig | null>("load_cloud_config");
+}
+
+export function syncVaultNow(): Promise<void> {
+  return invoke<void>("sync_vault_now");
+}
+
+export function onRcloneOutput(handler: (line: RcloneOutputLine) => void): Promise<UnlistenFn> {
+  return listen<RcloneOutputLine>("rclone-output", (event) => handler(event.payload));
+}
+
+export function onSyncFinished(handler: (result: SyncFinished) => void): Promise<UnlistenFn> {
+  return listen<SyncFinished>("rclone-sync-finished", (event) => handler(event.payload));
+}

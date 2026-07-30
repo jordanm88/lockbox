@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "apps": [
+    {
+      "id": "firefox-portable",
+      "name": "Firefox Portable",
+      "description": "Full Firefox browser, runs entirely from the drive.",
+      "icon": "🦊",
+      "homepage": "https://portableapps.com/apps/internet/firefox_portable",
+      "targets": {
+        "windows": {
+          "url": "https://REPLACE-ME.example.invalid/firefox-portable/FirefoxPortable.zip",
+          "archiveType": "zip",
+          "launcher": "FirefoxPortable.exe"
+        }
+      }
+    },
+    {
+      "id": "libreoffice-portable",
+      "name": "LibreOffice Portable",
+      "description": "Office suite (documents, spreadsheets, slides) with no install step.",
+      "icon": "📝",
+      "homepage": "https://portableapps.com/apps/office/libreoffice_portable",
+      "targets": {
+        "windows": {
+          "url": "https://REPLACE-ME.example.invalid/libreoffice-portable/LibreOfficePortable.zip",
+          "archiveType": "zip",
+          "launcher": "LibreOfficePortable.exe"
+        }
+      }
+    },
+    {
+      "id": "vlc",
+      "name": "VLC",
+      "description": "Plays practically any video or audio file from the vault.",
+      "icon": "🎬",
+      "homepage": "https://www.videolan.org/vlc/",
+      "targets": {
+        "windows": {
+          "url": "https://REPLACE-ME.example.invalid/vlc/vlc-portable-win64.zip",
+          "archiveType": "zip",
+          "launcher": "vlc.exe"
+        },
+        "macos": {
+          "url": "https://REPLACE-ME.example.invalid/vlc/vlc-macos.tar.gz",
+          "archiveType": "tar.gz",
+          "launcher": "VLC.app/Contents/MacOS/VLC"
+        },
+        "linux": {
+          "url": "https://REPLACE-ME.example.invalid/vlc/vlc-linux-x86_64.AppImage",
+          "archiveType": "appimage",
+          "launcher": "VLC.AppImage"
+        }
+      }
+    }
+  ]
+}

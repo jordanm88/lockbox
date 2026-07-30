@@ -1,0 +1,1 @@
+Placeholder — real icons aren't generated yet (needs `cargo tauri icon` with a Rust toolchain, or a source PNG). `tauri.conf.json` references files under this folder for `bundle.icon`; they must exist before running a release bundle build. Not required for `npm run dev` (frontend-only) in Phase 1.

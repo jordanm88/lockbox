@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-paper text-ink font-display;
+  background-image: radial-gradient(#00000018 1.5px, transparent 1.5px);
+  background-size: 22px 22px;
+}

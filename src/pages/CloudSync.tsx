@@ -160,14 +160,14 @@ export default function CloudSync() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="neo-panel bg-paper p-6">
-          <p className="mb-3 font-black uppercase">Provider</p>
-          <div className="mb-6 flex gap-3">
+          <p className="mb-3 text-sm font-black uppercase tracking-[0.2em] text-ink/75">Provider</p>
+          <div className="mb-6 flex flex-wrap gap-3">
             {PROVIDERS.map((option) => (
               <button
                 key={option.id}
                 type="button"
                 onClick={() => switchProvider(option.id)}
-                className={`neo-btn flex-1 py-3 ${config.provider === option.id ? "bg-neo-blue text-white" : "bg-paper"}`}
+                className={`neo-btn flex-1 min-w-[9rem] py-3 ${config.provider === option.id ? "bg-neo-blue text-white" : "bg-paper"}`}
               >
                 {option.icon} {option.label}
               </button>
@@ -233,7 +233,7 @@ export default function CloudSync() {
                 </>
               )}
 
-              <button type="button" onClick={handleSave} disabled={saving} className="neo-btn mt-2 bg-neo-green py-3">
+              <button type="button" onClick={handleSave} disabled={saving} className="neo-btn mt-2 bg-neo-green py-3 text-white">
                 {saving ? "Saving…" : saved ? "✓ Saved" : "💾 Save Connection"}
               </button>
             </div>
@@ -242,7 +242,7 @@ export default function CloudSync() {
 
         <div className="neo-panel flex flex-col bg-paper p-6">
           <div className="mb-4 flex items-center justify-between">
-            <p className="font-black uppercase">Status</p>
+            <p className="text-sm font-black uppercase tracking-[0.2em] text-ink/70">Status</p>
             <StatusBadge status={syncStatus} />
           </div>
 

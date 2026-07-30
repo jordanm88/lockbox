@@ -8,15 +8,18 @@ interface SidebarProps {
 
 export default function Sidebar({ activeTab, onSelectTab, onLock }: SidebarProps) {
   return (
-    <aside className="flex h-screen w-64 shrink-0 flex-col border-r-4 border-ink bg-ink">
-      <div className="border-b-4 border-neo-yellow px-6 py-6">
-        <div className="text-3xl">🔒</div>
-        <h1 className="mt-1 text-2xl font-black uppercase tracking-tight text-white">
+    <aside className="flex min-h-screen w-72 shrink-0 flex-col border-r-4 border-ink bg-ink/95 text-white shadow-brutal">
+      <div className="border-b-4 border-neo-yellow px-6 py-8">
+        <div className="text-4xl">🔒</div>
+        <h1 className="mt-3 text-3xl font-black uppercase tracking-tight text-white">
           Lockbox
         </h1>
+        <p className="mt-2 max-w-[14rem] text-sm font-bold text-white/70">
+          Secure portable vault access for your drive.
+        </p>
       </div>
 
-      <nav className="flex flex-1 flex-col">
+      <nav className="flex flex-1 flex-col gap-2 px-4 py-4">
         {NAV_ITEMS.map((item) => {
           const isActive = item.id === activeTab;
           return (
@@ -24,10 +27,10 @@ export default function Sidebar({ activeTab, onSelectTab, onLock }: SidebarProps
               key={item.id}
               type="button"
               onClick={() => onSelectTab(item.id)}
-              className={`flex items-center gap-3 border-b-4 border-ink px-6 py-5 text-left font-black uppercase tracking-wide transition-colors ${
+              className={`flex items-center gap-3 rounded-sm border-2 border-transparent px-4 py-4 text-left font-black uppercase tracking-wide transition-all duration-150 ${
                 isActive
-                  ? "border-l-8 border-l-white bg-neo-yellow text-ink"
-                  : "text-white hover:bg-white/10"
+                  ? "border-l-8 border-l-white bg-white text-ink shadow-brutal-sm"
+                  : "text-white/85 hover:bg-white/10"
               }`}
             >
               <span className="text-2xl">{item.icon}</span>
@@ -37,7 +40,7 @@ export default function Sidebar({ activeTab, onSelectTab, onLock }: SidebarProps
         })}
       </nav>
 
-      <div className="border-t-4 border-neo-yellow p-4">
+      <div className="border-t-4 border-neo-yellow p-5">
         <button type="button" onClick={onLock} className="neo-btn w-full bg-neo-red py-3 text-white">
           🔒 Lock Vault
         </button>

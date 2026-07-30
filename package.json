@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-win.ps1",
     "preview": "vite preview",
     "tauri": "tauri"
   },

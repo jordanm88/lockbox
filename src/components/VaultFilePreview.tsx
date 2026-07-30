@@ -40,9 +40,12 @@ export default function VaultFilePreview({ name, objectUrl, mimeType, onClose }:
         className="neo-panel max-h-[85vh] w-full max-w-3xl overflow-auto bg-paper p-6"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="mb-4 flex items-center justify-between gap-4">
-          <h3 className="truncate text-xl font-black">{name}</h3>
-          <button type="button" onClick={onClose} className="neo-btn shrink-0 px-3 py-1">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="truncate text-xl font-black text-ink">{name}</h3>
+            <p className="text-sm font-bold text-ink/60">Preview</p>
+          </div>
+          <button type="button" onClick={onClose} className="neo-btn shrink-0 rounded-sm bg-neo-red px-4 py-2 text-white">
             ✕ Close
           </button>
         </div>
@@ -51,7 +54,7 @@ export default function VaultFilePreview({ name, objectUrl, mimeType, onClose }:
         {isPdf && <iframe title={name} src={objectUrl} className="neo-border h-[70vh] w-full" />}
         {isText && <TextPreview objectUrl={objectUrl} />}
         {!isImage && !isPdf && !isText && (
-          <p className="font-bold">Preview not supported for this file type yet.</p>
+          <p className="font-bold text-ink/70">Preview not supported for this file type yet.</p>
         )}
       </div>
     </div>

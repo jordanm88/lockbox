@@ -98,15 +98,15 @@ export default function Vault() {
     <div>
       <PageHeader icon="🔐" title="Vault" subtitle="Files stay encrypted on this drive. Nothing touches the host disk." />
 
-      <div className="mb-6 flex items-center justify-between">
-        <p className="font-black uppercase">
+      <div className="neo-panel mb-6 flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+        <p className="font-black uppercase text-ink">
           {loading ? "Loading…" : `${files.length} item${files.length === 1 ? "" : "s"}`}
         </p>
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={uploading}
-          className="neo-btn bg-neo-green px-5 py-3"
+          className="neo-btn rounded-sm bg-neo-green px-5 py-3 text-white"
         >
           {uploading ? "Encrypting…" : "⬆️ Upload Files"}
         </button>
@@ -132,18 +132,18 @@ export default function Vault() {
             key={file.name}
             type="button"
             onClick={() => handleView(file)}
-            className="neo-card flex items-center gap-4 p-4 text-left transition-brutal hover:translate-x-1 hover:translate-y-1 hover:shadow-none"
+            className="neo-panel flex items-center gap-4 p-5 text-left transition-transform duration-150 hover:-translate-y-1 hover:shadow-brutal-sm"
           >
-            <span className="text-3xl">{iconFor(file.name)}</span>
+            <span className="text-4xl">{iconFor(file.name)}</span>
             <div className="min-w-0">
-              <p className="truncate font-black">{file.name}</p>
-              <p className="text-sm font-bold text-ink/60">{formatSize(file.size)}</p>
+              <p className="truncate text-lg font-black text-ink">{file.name}</p>
+              <p className="mt-1 text-sm font-bold text-ink/60">{formatSize(file.size)}</p>
             </div>
           </button>
         ))}
 
         {!loading && files.length === 0 && (
-          <div className="neo-card col-span-full p-8 text-center font-black uppercase text-ink/50">
+          <div className="neo-panel col-span-full p-8 text-center font-black uppercase text-ink/60">
             Vault is empty. Upload something.
           </div>
         )}

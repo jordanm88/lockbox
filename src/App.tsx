@@ -33,14 +33,18 @@ export default function App() {
   }
 
   return (
-    <div className="flex">
-      <Sidebar activeTab={activeTab} onSelectTab={setActiveTab} onLock={handleLock} />
-      <main className="min-h-screen flex-1 overflow-y-auto p-8">
-        {activeTab === "vault" && <Vault />}
-        {activeTab === "appstore" && <AppStore />}
-        {activeTab === "cloudsync" && <CloudSync />}
-        {activeTab === "settings" && <Settings onLock={handleLock} />}
-      </main>
+    <div className="min-h-screen bg-ink/5">
+      <div className="flex min-h-screen">
+        <Sidebar activeTab={activeTab} onSelectTab={setActiveTab} onLock={handleLock} />
+        <main className="flex-1 overflow-y-auto p-8">
+          <div className="mx-auto w-full max-w-7xl">
+            {activeTab === "vault" && <Vault />}
+            {activeTab === "appstore" && <AppStore />}
+            {activeTab === "cloudsync" && <CloudSync />}
+            {activeTab === "settings" && <Settings onLock={handleLock} />}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

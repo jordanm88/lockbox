@@ -31,8 +31,19 @@ foreach ($dir in @("Vault", "Apps", "Tools\win", "Tools\mac", "Tools\linux")) {
 }
 
 $destExe = Join-Path $UsbDrivePath "Lockbox-Windows.exe"
+
+if (Get-Command Unblock-File -ErrorAction SilentlyContinue) {
+    Unblock-File -Path $builtExe -ErrorAction SilentlyContinue
+}
 Copy-Item -Path $builtExe -Destination $destExe -Force
-Write-Host "Copied Lockbox-Windows.exe to $UsbDrivePath"
+
+if (Get-Command Unblock-File -ErrorAction SilentlyContinue) {
+    Unblock-File -Path $destExe -ErrorAction SilentlyContinue
+    Write-Host "Copied and unblocked Lockbox-Windows.exe to $UsbDrivePath"
+} else {
+    Write-Host "Copied Lockbox-Windows.exe to $UsbDrivePath"
+    Write-Warning "Unable to run Unblock-File on this PowerShell version. If Windows still blocks the exe, use: Unblock-File -Path '$destExe'"
+}
 
 $rcloneDest = Join-Path $UsbDrivePath "Tools\win\rclone.exe"
 if (-not (Test-Path $rcloneDest)) {

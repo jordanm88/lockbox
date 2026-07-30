@@ -9,6 +9,10 @@ export function unlockVault(passphrase: string): Promise<boolean> {
   return invoke<boolean>("unlock_vault", { passphrase });
 }
 
+export function vaultExists(): Promise<boolean> {
+  return invoke<boolean>("vault_exists", {});
+}
+
 export function lockVault(): Promise<void> {
   return invoke<void>("lock_vault");
 }

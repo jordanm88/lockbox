@@ -34,6 +34,13 @@ pub fn lock_vault(state: State<AppState>) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn vault_exists(state: State<AppState>) -> Result<bool, String> {
+    let vault_dir = usb_root::vault_dir(&state.root);
+    let meta_path = vault_dir.join(".lockbox").join("vault.meta.json");
+    Ok(meta_path.exists())
+}
+
+#[tauri::command]
 pub fn encrypt_and_save_file(
     state: State<AppState>,
     file_bytes: Vec<u8>,

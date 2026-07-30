@@ -11,6 +11,22 @@ npm ci
 npm run tauri -- build
 ```
 
+Or on Windows only, use the included helper script:
+
+```powershell
+scripts\build-win.ps1
+```
+
+This builds the frontend, runs the bundled Tauri Windows build, and copies the raw
+portable executable into `build\Lockbox-Windows.exe`.
+
+> Windows builds require a Rust toolchain on PATH. Install Rust via rustup
+> (https://rustup.rs/) and make sure `cargo` is available before running the
+> helper script.
+>
+> If Windows still fails to build, also install the Visual Studio/MSVC C++
+> build tools required by the `x86_64-pc-windows-msvc` target.
+
 This produces:
 
 | OS      | Portable artifact                                            |
@@ -127,7 +143,8 @@ it can be cleared from PowerShell:
 ```powershell
 Unblock-File -Path "E:\Lockbox-Windows.exe"
 ```
-
+The included `scripts/package-usb.ps1` now also attempts to unblock the copied
+exe automatically when packaging onto a Windows USB drive.
 As with macOS, the durable fix is Authenticode code-signing with a trusted
 certificate, which builds SmartScreen reputation over time — not set up
 here, same reason as the Gatekeeper case above.

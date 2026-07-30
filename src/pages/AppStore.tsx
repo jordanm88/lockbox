@@ -109,27 +109,27 @@ export default function AppStore() {
               : null;
 
             return (
-              <div key={app.id} className="neo-card flex flex-col gap-3 p-5">
+              <div key={app.id} className="neo-panel flex flex-col gap-4 p-5">
                 <div className="flex items-start gap-4">
                   <span className="text-4xl">{app.icon}</span>
                   <div className="flex-1">
-                    <p className="text-lg font-black">{app.name}</p>
-                    <p className="font-bold text-ink/60">{app.description}</p>
+                    <p className="text-lg font-black text-ink">{app.name}</p>
+                    <p className="mt-1 font-bold text-ink/60">{app.description}</p>
                     {app.sizeBytes !== null && (
-                      <p className="mt-1 text-sm font-bold text-ink/40">{formatBytes(app.sizeBytes)}</p>
+                      <p className="mt-2 text-sm font-bold text-ink/40">{formatBytes(app.sizeBytes)}</p>
                     )}
                   </div>
                 </div>
 
                 {isInstalling && (
-                  <div>
+                  <div className="space-y-2">
                     <div className="neo-border h-6 w-full overflow-hidden bg-white">
                       <div
                         className={`h-full bg-neo-green transition-all ${percent === null ? "animate-pulse" : ""}`}
                         style={{ width: percent !== null ? `${percent}%` : "100%" }}
                       />
                     </div>
-                    <p className="mt-1 text-sm font-bold uppercase">
+                    <p className="text-sm font-black uppercase text-ink/70">
                       {appProgress?.stage === "extracting"
                         ? "Extracting…"
                         : percent !== null
@@ -140,14 +140,14 @@ export default function AppStore() {
                 )}
 
                 {!app.available ? (
-                  <button type="button" disabled className="neo-btn py-2">
+                  <button type="button" disabled className="neo-btn py-3">
                     Unavailable on this OS
                   </button>
                 ) : app.installed ? (
                   <button
                     type="button"
                     onClick={() => handleLaunch(app)}
-                    className="neo-btn bg-neo-blue py-2 text-white"
+                    className="neo-btn bg-neo-blue py-3 text-white"
                   >
                     ▶ Launch
                   </button>
@@ -156,7 +156,7 @@ export default function AppStore() {
                     type="button"
                     onClick={() => handleInstall(app)}
                     disabled={isInstalling}
-                    className="neo-btn bg-neo-green py-2"
+                    className="neo-btn bg-neo-green py-3"
                   >
                     {isInstalling ? "Installing…" : "⬇ Install"}
                   </button>

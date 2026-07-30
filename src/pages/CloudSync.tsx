@@ -88,6 +88,8 @@ export default function CloudSync() {
   const [testResult, setTestResult] = useState<"idle" | "ok" | "failed">("idle");
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
   const [output, setOutput] = useState<string[]>([]);
+  const [lastAction, setLastAction] = useState<"sync" | "test" | null>(null);
+  const [lastErrorDetail, setLastErrorDetail] = useState<string | null>(null);
   const outputRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -145,31 +147,49 @@ export default function CloudSync() {
   }
 
   async function handleSync() {
+    setLastAction("sync");
     setSyncStatus("running");
     setOutput([]);
     setError(null);
+    setLastErrorDetail(null);
     try {
       await syncVaultNow();
       setSyncStatus("success");
     } catch (err) {
       setSyncStatus("failed");
-      setError(err instanceof Error ? err.message : "Sync failed.");
+      const message = err instanceof Error ? err.message : "Sync failed.";
+      setError(message);
+      setLastErrorDetail(message);
     }
   }
 
   async function handleTestConnection() {
+    setLastAction("test");
     setTesting(true);
     setTestResult("idle");
     setOutput([]);
     setError(null);
+    setLastErrorDetail(null);
     try {
       await testCloudConnection(config);
       setTestResult("ok");
     } catch (err) {
       setTestResult("failed");
-      setError(err instanceof Error ? err.message : "Connection test failed.");
+      const message = err instanceof Error ? err.message : "Connection test failed.";
+      setError(message);
+      setLastErrorDetail(message);
     } finally {
       setTesting(false);
+    }
+  }
+
+  async function retryLastAction() {
+    if (lastAction === "sync") {
+      await handleSync();
+      return;
+    }
+    if (lastAction === "test") {
+      await handleTestConnection();
     }
   }
 
@@ -277,6 +297,17 @@ export default function CloudSync() {
                     ? "Connection failed"
                     : "Run a test to validate credentials and remote path."}
               </p>
+
+              {lastErrorDetail && (
+                <div className="neo-card bg-red-50 p-3">
+                  <p className="text-sm font-semibold text-red-700">Last error: {lastErrorDetail}</p>
+                  {lastAction && (
+                    <button type="button" onClick={retryLastAction} disabled={busy} className="neo-btn mt-2 bg-neo-red px-3 py-2 text-white">
+                      Retry {lastAction === "sync" ? "sync" : "connection test"}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -306,6 +337,15 @@ export default function CloudSync() {
               output.map((line, index) => <div key={index}>{line}</div>)
             )}
           </div>
+
+          {output.length > 0 && (syncStatus === "failed" || testResult === "failed") && (
+            <div className="neo-card mt-3 bg-white p-3">
+              <p className="mb-2 text-sm font-semibold text-slate-700">Recent output details</p>
+              <pre className="max-h-36 overflow-auto whitespace-pre-wrap text-xs text-slate-700">
+                {output.slice(-12).join("\n")}
+              </pre>
+            </div>
+          )}
         </div>
       </div>
     </div>

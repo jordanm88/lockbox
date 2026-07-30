@@ -11,6 +11,7 @@ export interface CatalogEntry {
   installed: boolean;
   launcherPath: string | null;
   sizeBytes: number | null;
+  installKind: string | null;
 }
 
 export type InstallStage = "downloading" | "extracting" | "done";

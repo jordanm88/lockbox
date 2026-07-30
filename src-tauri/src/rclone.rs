@@ -49,13 +49,7 @@ pub async fn run_rclone_sync(
     root: PathBuf,
     config: CloudRemoteConfig,
 ) -> Result<(), String> {
-    let rclone_path = rclone_binary_path(&root);
-    if !rclone_path.is_file() {
-        return Err(format!(
-            "rclone binary not found at {} — place the platform build under Tools/",
-            rclone_path.display()
-        ));
-    }
+    let rclone_path = resolve_rclone_binary(&root)?;
 
     let vault_dir = usb_root::vault_dir(&root);
     // `rclone sync` mirrors source onto dest, deleting anything in dest that
@@ -143,13 +137,7 @@ pub async fn run_rclone_test(
     root: PathBuf,
     config: CloudRemoteConfig,
 ) -> Result<(), String> {
-    let rclone_path = rclone_binary_path(&root);
-    if !rclone_path.is_file() {
-        return Err(format!(
-            "rclone binary not found at {} — place the platform build under Tools/",
-            rclone_path.display()
-        ));
-    }
+    let rclone_path = resolve_rclone_binary(&root)?;
 
     let env_vars = {
         let rclone_path = rclone_path.clone();
@@ -359,4 +347,33 @@ fn obscure_password(rclone_path: &Path, plaintext: &str) -> Result<String, Strin
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn resolve_rclone_binary(root: &Path) -> Result<PathBuf, String> {
+    let bundled = rclone_binary_path(root);
+    if bundled.is_file() {
+        return Ok(bundled);
+    }
+
+    // Fallback to host PATH for development/desktop scenarios.
+    let cmd = if cfg!(target_os = "windows") {
+        "rclone.exe"
+    } else {
+        "rclone"
+    };
+
+    let probe = std::process::Command::new(cmd)
+        .arg("version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+
+    if probe.is_ok() {
+        return Ok(PathBuf::from(cmd));
+    }
+
+    Err(format!(
+        "rclone was not found. Expected bundled binary at {} or `rclone` on PATH.",
+        bundled.display()
+    ))
 }

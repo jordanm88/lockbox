@@ -31,7 +31,7 @@ This produces:
 
 | OS      | Portable artifact                                            |
 | ------- | -------------------------------------------------------------- |
-| Windows | `src-tauri/target/release/lockbox.exe` (raw exe, not the NSIS/MSI installer) |
+| Windows | `src-tauri/target/release/Lockbox.exe` (raw exe, not the NSIS/MSI installer) |
 | macOS   | `src-tauri/target/release/bundle/macos/Lockbox.app`             |
 | Linux   | `src-tauri/target/release/bundle/appimage/*.AppImage`           |
 

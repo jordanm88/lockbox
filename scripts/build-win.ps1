@@ -31,9 +31,15 @@ try {
     Write-Host "Building Tauri Windows executable..."
     npx tauri build --target x86_64-pc-windows-msvc
 
-    $builtExe = Join-Path $repoRoot "src-tauri\target\release\lockbox.exe"
+    $builtExe = Join-Path $repoRoot "src-tauri\target\release\Lockbox.exe"
     if (-not (Test-Path $builtExe)) {
-        throw "Built executable not found at $builtExe. Ensure the Rust toolchain and Visual Studio/MSVC build tools are installed."
+        # Backward compatibility with older target name.
+        $legacyExe = Join-Path $repoRoot "src-tauri\target\release\lockbox.exe"
+        if (Test-Path $legacyExe) {
+            $builtExe = $legacyExe
+        } else {
+            throw "Built executable not found at $builtExe. Ensure the Rust toolchain and Visual Studio/MSVC build tools are installed."
+        }
     }
 
     $outputPath = Join-Path $repoRoot $OutputDir

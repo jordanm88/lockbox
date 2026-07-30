@@ -102,6 +102,7 @@ fn install_app_inner(
         ArchiveType::Zip => extract_zip(&bytes, install_dir)?,
         ArchiveType::TarGz => extract_tar_gz(&bytes, install_dir)?,
         ArchiveType::Appimage => install_single_file(&bytes, install_dir, &target.launcher)?,
+        ArchiveType::Binary | ArchiveType::Exe => install_single_file(&bytes, install_dir, &target.launcher)?,
     }
 
     emit_progress(

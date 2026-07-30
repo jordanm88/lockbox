@@ -70,6 +70,10 @@ pub enum ArchiveType {
     TarGz,
     #[serde(rename = "appimage")]
     Appimage,
+    #[serde(rename = "binary")]
+    Binary,
+    #[serde(rename = "exe")]
+    Exe,
 }
 
 pub fn load_catalog(app_handle: &AppHandle) -> Result<AppCatalog, String> {

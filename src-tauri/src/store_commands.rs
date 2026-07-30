@@ -17,6 +17,17 @@ pub struct CatalogEntry {
     installed: bool,
     launcher_path: Option<String>,
     size_bytes: Option<u64>,
+    install_kind: Option<String>,
+}
+
+fn install_kind_label(target: &catalog::TargetSpec) -> String {
+    match target.archive_type {
+        catalog::ArchiveType::Zip => "ZIP package".to_string(),
+        catalog::ArchiveType::TarGz => "tar.gz package".to_string(),
+        catalog::ArchiveType::Appimage => "AppImage".to_string(),
+        catalog::ArchiveType::Binary => "Direct binary".to_string(),
+        catalog::ArchiveType::Exe => "Windows executable".to_string(),
+    }
 }
 
 #[tauri::command]
@@ -48,6 +59,7 @@ pub fn get_app_catalog(
                 installed,
                 launcher_path,
                 size_bytes: target.and_then(|t| t.size_bytes),
+                install_kind: target.map(install_kind_label),
             }
         })
         .collect();

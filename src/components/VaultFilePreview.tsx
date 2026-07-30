@@ -23,7 +23,7 @@ function TextPreview({ objectUrl }: { objectUrl: string }) {
   }, [objectUrl]);
 
   return (
-    <pre className="neo-border max-h-[70vh] overflow-auto whitespace-pre-wrap bg-white p-4 font-mono text-sm">
+    <pre className="neo-border h-full min-h-[45vh] overflow-auto whitespace-pre-wrap bg-white p-4 font-mono text-sm sm:min-h-[60vh]">
       {text ?? "Loading…"}
     </pre>
   );
@@ -35,27 +35,29 @@ export default function VaultFilePreview({ name, objectUrl, mimeType, onClose }:
   const isText = mimeType.startsWith("text/") || mimeType === "application/json";
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-ink/80 p-6" onClick={onClose}>
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-ink/80 p-3 sm:p-6" onClick={onClose}>
       <div
-        className="neo-panel max-h-[85vh] w-full max-w-3xl overflow-auto bg-paper p-6"
+        className="neo-panel flex h-[92vh] w-full max-w-6xl flex-col overflow-hidden bg-paper p-4 sm:p-6"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="truncate text-xl font-black text-ink">{name}</h3>
-            <p className="text-sm font-bold text-ink/60">Preview</p>
+            <h3 className="truncate text-lg font-semibold text-ink sm:text-xl">{name}</h3>
+            <p className="text-sm text-slate-600">Preview</p>
           </div>
           <button type="button" onClick={onClose} className="neo-btn shrink-0 rounded-sm bg-neo-red px-4 py-2 text-white">
             ✕ Close
           </button>
         </div>
 
-        {isImage && <img src={objectUrl} alt={name} className="neo-border max-w-full" />}
-        {isPdf && <iframe title={name} src={objectUrl} className="neo-border h-[70vh] w-full" />}
-        {isText && <TextPreview objectUrl={objectUrl} />}
-        {!isImage && !isPdf && !isText && (
-          <p className="font-bold text-ink/70">Preview not supported for this file type yet.</p>
-        )}
+        <div className="min-h-0 flex-1">
+          {isImage && <img src={objectUrl} alt={name} className="neo-border mx-auto max-h-full w-auto max-w-full object-contain" />}
+          {isPdf && <iframe title={name} src={objectUrl} className="neo-border h-full min-h-[52vh] w-full sm:min-h-[68vh]" />}
+          {isText && <TextPreview objectUrl={objectUrl} />}
+          {!isImage && !isPdf && !isText && (
+            <p className="font-medium text-slate-600">Preview not supported for this file type yet.</p>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -5,7 +5,7 @@
 # Vault/, Apps/, and Tools/ contents and only writes the new Lockbox binary.
 #
 # Run this AFTER `npm run tauri -- build` has produced
-# src-tauri\target\release\lockbox.exe.
+# src-tauri\target\release\Lockbox.exe.
 #
 # Usage:
 #   .\scripts\package-usb.ps1 -UsbDrivePath E:\
@@ -22,10 +22,15 @@ if (-not (Test-Path $UsbDrivePath)) {
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$builtExe = Join-Path $repoRoot "src-tauri\target\release\lockbox.exe"
+$builtExe = Join-Path $repoRoot "src-tauri\target\release\Lockbox.exe"
 
 if (-not (Test-Path $builtExe)) {
-    throw "Built executable not found at $builtExe. Run 'npm run tauri -- build' first."
+    $legacyExe = Join-Path $repoRoot "src-tauri\target\release\lockbox.exe"
+    if (Test-Path $legacyExe) {
+        $builtExe = $legacyExe
+    } else {
+        throw "Built executable not found at $builtExe. Run 'npm run tauri -- build' first."
+    }
 }
 
 Write-Host "Setting up USB folder layout at $UsbDrivePath ..."

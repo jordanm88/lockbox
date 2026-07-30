@@ -76,6 +76,8 @@ jobs:
           name: lockbox-${{ matrix.platform }}
           path: |
             src-tauri/target/release/bundle/
+            src-tauri/target/release/Lockbox
+            src-tauri/target/release/Lockbox.exe
             src-tauri/target/release/lockbox
             src-tauri/target/release/lockbox.exe
           if-no-files-found: warn

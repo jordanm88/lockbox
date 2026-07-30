@@ -173,9 +173,18 @@ export default function AppStore() {
                   <div className="flex-1">
                     <p className="text-lg font-semibold text-ink">{app.name}</p>
                     <p className="mt-1 font-bold text-ink/60">{app.description}</p>
-                    {app.sizeBytes !== null && (
-                      <p className="mt-2 text-sm font-bold text-ink/40">{formatBytes(app.sizeBytes)}</p>
-                    )}
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {app.sizeBytes !== null && (
+                        <span className="neo-border bg-white px-2 py-1 text-xs font-medium text-slate-700">
+                          {formatBytes(app.sizeBytes)}
+                        </span>
+                      )}
+                      {app.installKind && (
+                        <span className="neo-border bg-white px-2 py-1 text-xs font-medium text-slate-700">
+                          {app.installKind}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -251,7 +260,9 @@ export default function AppStore() {
         onCancel={cancelUninstall}
       />
 
-      <footer className="mt-8 text-center text-sm text-ink/60">Version {pkg.version}</footer>
+      <footer className="mt-8 text-center text-sm text-slate-600">
+        Version {pkg.version} · Portable binary: Lockbox
+      </footer>
     </div>
   );
 }

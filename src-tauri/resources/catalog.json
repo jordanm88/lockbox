@@ -2,62 +2,44 @@
   "schemaVersion": 1,
   "apps": [
     {
-      "id": "firefox-portable",
-      "name": "Firefox Portable",
-      "description": "Full Firefox browser, runs entirely from the drive.",
-      "icon": "ðŸ¦Š",
-      "homepage": "https://portableapps.com/apps/internet/firefox_portable",
+      "id": "sumatra-pdf",
+      "name": "SumatraPDF",
+      "description": "Lightweight PDF and document reader that runs from the app folder.",
+      "icon": "PDF",
+      "homepage": "https://www.sumatrapdfreader.org/free-pdf-reader",
       "targets": {
         "windows": {
-          "url": "https://portableapps.com/downloading/?a=PortableApps.comPlatform&s=s&d=pa&n=The%20PortableApps.com%20Platform&f=PortableApps.com_Platform_Setup_30.4.2.paf.exe",
+          "url": "https://www.sumatrapdfreader.org/dl2/SumatraPDF-3.5.2-64.zip",
           "archiveType": "zip",
-          "launcher": "FirefoxPortable.exe",
-          "sha256": "6bf4f53ca3a87a5bb1cc2552cda9b2a7ef1f2dc9ac12f370face59bd52d94451",
-          "sizeBytes": 25624
+          "launcher": "SumatraPDF.exe"
         }
       }
     },
     {
-      "id": "libreoffice-portable",
-      "name": "LibreOffice Portable",
-      "description": "Office suite (documents, spreadsheets, slides) with no install step.",
-      "icon": "ðŸ“",
-      "homepage": "https://portableapps.com/apps/office/libreoffice_portable",
+      "id": "notepadpp-portable",
+      "name": "Notepad++ Portable",
+      "description": "Portable source-code editor with syntax highlighting and tabs.",
+      "icon": "TXT",
+      "homepage": "https://notepad-plus-plus.org/downloads/",
       "targets": {
         "windows": {
-          "url": "https://portableapps.com/downloading/?a=PortableApps.comPlatform&s=s&d=pa&n=The%20PortableApps.com%20Platform&f=PortableApps.com_Platform_Setup_30.4.2.paf.exe",
+          "url": "https://github.com/notepad-plus-plus/notepad-plus-plus/releases/download/v8.7.7/npp.8.7.7.portable.x64.zip",
           "archiveType": "zip",
-          "launcher": "LibreOfficePortable.exe",
-          "sha256": "6bf4f53ca3a87a5bb1cc2552cda9b2a7ef1f2dc9ac12f370face59bd52d94451",
-          "sizeBytes": 25624
+          "launcher": "notepad++.exe"
         }
       }
     },
     {
-      "id": "vlc",
-      "name": "VLC",
-      "description": "Plays practically any video or audio file from the vault.",
-      "icon": "ðŸŽ¬",
-      "homepage": "https://www.videolan.org/vlc/",
+      "id": "jq",
+      "name": "jq",
+      "description": "Command-line JSON processor (single executable).",
+      "icon": "JSON",
+      "homepage": "https://jqlang.github.io/jq/",
       "targets": {
         "windows": {
-          "url": "https://get.videolan.org/vlc/3.0.23/win64/vlc-3.0.23-win64.exe",
-          "archiveType": "zip",
-          "launcher": "vlc.exe",
-          "sha256": "85052791cb3067d60bf4bccc2be8a34f8cb7bb721787a109cdfb21f272415087",
-          "sizeBytes": 29335
-        },
-        "macos": {
-          "url": "https://www.videolan.org/vlc/",
-          "archiveType": "tar.gz",
-          "launcher": "VLC.app/Contents/MacOS/VLC",
-          "sha256": "2484e358f8de4e97a8681efbe14c8390a667827ff38ecaee657c78ca8c76e73f"
-        },
-        "linux": {
-          "url": "https://www.videolan.org/vlc/",
-          "archiveType": "appimage",
-          "launcher": "VLC.AppImage",
-          "sha256": "2484e358f8de4e97a8681efbe14c8390a667827ff38ecaee657c78ca8c76e73f"
+          "url": "https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-windows-amd64.exe",
+          "archiveType": "binary",
+          "launcher": "jq.exe"
         }
       }
     }

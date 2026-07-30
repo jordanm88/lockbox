@@ -156,14 +156,25 @@ export default function AppStore() {
                     ▶ Launch
                   </button>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => handleInstall(app)}
-                    disabled={isInstalling}
-                    className="neo-btn bg-neo-green py-3"
-                  >
-                    {isInstalling ? "Installing…" : "⬇ Install"}
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleInstall(app)}
+                      disabled={isInstalling}
+                      className="neo-btn bg-neo-green py-3"
+                    >
+                      {isInstalling ? "Installing…" : "⬇ Install"}
+                    </button>
+                    {app.homepage && (
+                      <button
+                        type="button"
+                        onClick={() => app.homepage && window.open(app.homepage, "_blank")}
+                        className="neo-btn py-3"
+                      >
+                        Info
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             );

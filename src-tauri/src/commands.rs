@@ -68,10 +68,11 @@ pub fn encrypt_and_save_file(
     let guard = lock_recover(&state.vault_key);
     let key = guard.as_ref().ok_or("vault is locked")?;
 
+    let normalized_dest = normalize_relative_path(&relative_dest)?;
     let vault_dir = usb_root::vault_dir(&state.root);
     let mut index = load_or_upgrade_index(&vault_dir, key)?;
 
-    let saved_relative = unique_original_path(&index, &relative_dest);
+    let saved_relative = unique_original_path(&index, &normalized_dest);
     ensure_parent_directories(&mut index, &saved_relative);
 
     let data_dir = ensure_data_dir(&vault_dir)?;

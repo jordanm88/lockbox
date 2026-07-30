@@ -69,6 +69,11 @@ under `Tools/<os>/` and prints a reminder if one isn't there yet — download
 it from https://rclone.org/downloads/ (Phase 4 only invokes it, it doesn't
 fetch it).
 
+> Updating an existing USB drive is safe: the packaging scripts preserve
+> existing `Vault/`, `Apps/`, and `Tools/` content and only replace the
+> Lockbox executable or app bundle itself. User data and installed apps are
+> left intact.
+
 ## 3. Bypassing host OS security flags
 
 All three OSes treat an unsigned executable arriving from removable media

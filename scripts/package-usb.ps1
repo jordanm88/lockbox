@@ -1,6 +1,9 @@
 # Packages a locally-built Lockbox Windows executable onto a USB drive laid
 # out per the USB_ROOT / Vault / Apps / Tools convention.
 #
+# This script is update-safe for existing drives: it preserves any existing
+# Vault/, Apps/, and Tools/ contents and only writes the new Lockbox binary.
+#
 # Run this AFTER `npm run tauri -- build` has produced
 # src-tauri\target\release\lockbox.exe.
 #
@@ -31,6 +34,12 @@ foreach ($dir in @("Vault", "Apps", "Tools\win", "Tools\mac", "Tools\linux")) {
 }
 
 $destExe = Join-Path $UsbDrivePath "Lockbox-Windows.exe"
+$backupExe = Join-Path $UsbDrivePath "Lockbox-Windows.exe.bak"
+
+if (Test-Path $destExe) {
+    Write-Host "Backing up existing executable to Lockbox-Windows.exe.bak ..."
+    Copy-Item -Path $destExe -Destination $backupExe -Force
+}
 
 if (Get-Command Unblock-File -ErrorAction SilentlyContinue) {
     Unblock-File -Path $builtExe -ErrorAction SilentlyContinue

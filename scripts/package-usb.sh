@@ -36,6 +36,12 @@ if [[ "$OS_NAME" == "Darwin" ]]; then
     exit 1
   fi
 
+  if [[ -d "$USB_ROOT/Lockbox-macOS.app" ]]; then
+    echo "Backing up existing bundle to $USB_ROOT/Lockbox-macOS.app.bak ..."
+    rm -rf "$USB_ROOT/Lockbox-macOS.app.bak"
+    cp -R "$USB_ROOT/Lockbox-macOS.app" "$USB_ROOT/Lockbox-macOS.app.bak"
+  fi
+
   rm -rf "$USB_ROOT/Lockbox-macOS.app"
   cp -R "$APP_BUNDLE" "$USB_ROOT/Lockbox-macOS.app"
   echo "Copied Lockbox-macOS.app to $USB_ROOT"
@@ -51,6 +57,12 @@ elif [[ "$OS_NAME" == "Linux" ]]; then
   if [[ -z "$APPIMAGE" ]]; then
     echo "No .AppImage found under $BUNDLE_DIR/appimage. Run 'npm run tauri -- build' first." >&2
     exit 1
+  fi
+
+  if [[ -f "$USB_ROOT/Lockbox-Linux.AppImage" ]]; then
+    echo "Backing up existing AppImage to $USB_ROOT/Lockbox-Linux.AppImage.bak ..."
+    rm -f "$USB_ROOT/Lockbox-Linux.AppImage.bak"
+    cp "$USB_ROOT/Lockbox-Linux.AppImage" "$USB_ROOT/Lockbox-Linux.AppImage.bak"
   fi
 
   cp "$APPIMAGE" "$USB_ROOT/Lockbox-Linux.AppImage"

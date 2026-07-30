@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 export interface VaultFileEntry {
   name: string;
   size: number;
+  isDir: boolean;
 }
 
 export function unlockVault(passphrase: string): Promise<boolean> {

@@ -10,7 +10,8 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function iconFor(name: string): string {
+function iconFor(name: string, isDir?: boolean): string {
+  if (isDir) return "📁";
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
   if (["png", "jpg", "jpeg", "gif", "webp"].includes(ext)) return "🖼️";
   if (ext === "pdf") return "📕";
@@ -177,18 +178,28 @@ export default function Vault() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {files.map((file) => (
-          <button
+          <div
             key={file.name}
-            type="button"
-            onClick={() => handleView(file)}
-            className="neo-panel flex items-center gap-4 p-5 text-left transition-transform duration-150 hover:-translate-y-1 hover:shadow-brutal-sm"
+            className={
+              "neo-panel flex items-center gap-4 p-5 text-left transition-transform duration-150 " +
+              (file.isDir ? "" : "hover:-translate-y-1 hover:shadow-brutal-sm")
+            }
           >
-            <span className="text-4xl">{iconFor(file.name)}</span>
+            <span className="text-4xl">{iconFor(file.name, file.isDir)}</span>
             <div className="min-w-0">
               <p className="truncate text-lg font-black text-ink">{file.name}</p>
-              <p className="mt-1 text-sm font-bold text-ink/60">{formatSize(file.size)}</p>
+              <p className="mt-1 text-sm font-bold text-ink/60">{file.isDir ? "Folder" : formatSize(file.size)}</p>
             </div>
-          </button>
+            {!file.isDir && (
+              <button
+                type="button"
+                onClick={() => handleView(file)}
+                className="ml-auto text-sm font-bold text-neo-blue"
+              >
+                View
+              </button>
+            )}
+          </div>
         ))}
 
         {!loading && files.length === 0 && (

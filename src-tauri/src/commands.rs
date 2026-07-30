@@ -11,6 +11,7 @@ use tauri::State;
 pub struct VaultFileEntry {
     name: String,
     size: u64,
+    is_dir: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -411,10 +412,10 @@ pub fn list_vault_files(state: State<AppState>) -> Result<Vec<VaultFileEntry>, S
     let mut entries = index
         .entries
         .iter()
-        .filter(|entry| !entry.is_dir)
         .map(|entry| VaultFileEntry {
             name: entry.original_path.clone(),
             size: entry.size.unwrap_or(0),
+            is_dir: entry.is_dir,
         })
         .collect::<Vec<_>>();
 

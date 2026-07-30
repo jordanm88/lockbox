@@ -40,6 +40,42 @@ NSIS `.exe`, `.deb`, `.rpm`) alongside these — ignore them for USB use, they
 install onto the host rather than running portably. The packaging scripts
 below only pick out the three portable forms above.
 
+### Minimizing host footprint when using an installer (MSI/NSIS)
+
+If you must distribute an installer (MSI or NSIS) that will be placed on a
+removable drive and run there, prefer creating a *portable* installation
+that avoids writing data to the host machine's profile areas and registry.
+Two practical approaches:
+
+- Prefer shipping a ZIP/portable executable and instruct users to run the
+	executable directly from the drive — this is the safest option and is the
+	recommended distribution for Lockbox. The packaging scripts above are
+	designed for this flow.
+- If you must ship an MSI, build it so the user can choose a "portable"
+	install location and avoid system-wide registration. For WiX-based MSI
+	builds, set the install scope to per-user (not per-machine) and avoid
+	creating auto-start or Start Menu shortcuts by default. Example WiX
+	properties to consider when building or invoking the installer:
+
+```text
+	- InstallScope=perUser        # prefer per-user install (no machine-wide registry)
+	- ARPNOREMOVE=1               # avoid adding uninstall entries if desired
+	- ADD_SHORTCUTS=0             # custom property to skip creating Start Menu shortcuts
+```
+
+Exact property names depend on your WiX/NSIS script. The key goal is: when
+the installer is used to place Lockbox on a removable drive, ensure it does
+not create global system entries or write persistent configuration into
+`%APPDATA%` / `HKLM` / `HKCU` — instead leave all data next to the executable
+on the removable drive. Lockbox's runtime already prefers the executable's
+parent directory as the vault root, so when the exe is run from the USB
+drive it stores `Vault/` and `Apps/` next to the binary rather than on the
+host.
+
+If you want, I can help generate a WiX installer recipe that exposes a
+"portable" option and documents the exact properties to pass at install
+time.
+
 ## 2. Package onto a USB drive
 
 Each script creates the `Vault/`, `Apps/`, `Tools/{win,mac,linux}/` layout

@@ -3,6 +3,7 @@ import PageHeader from "../components/PageHeader";
 import VaultFilePreview from "../components/VaultFilePreview";
 import { createFolder, encryptAndSaveFile, listVaultFiles, readAndDecryptFile, VaultFileEntry } from "../lib/vaultBridge";
 import { mimeTypeFor } from "../lib/mime";
+import CreateFolderDialog from "../components/CreateFolderDialog";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -33,6 +34,7 @@ export default function Vault() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewState | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
@@ -128,22 +130,7 @@ export default function Vault() {
           <button
             type="button"
             disabled={uploading}
-            onClick={async () => {
-              const folderName = window.prompt("Create folder in vault:");
-              if (!folderName) return;
-              setUploading(true);
-              setError(null);
-              setNotice(null);
-              try {
-                await createFolder(folderName);
-                setNotice(`Created folder: ${folderName}`);
-                await refresh();
-              } catch (err) {
-                setError(err instanceof Error ? err.message : "Failed to create folder.");
-              } finally {
-                setUploading(false);
-              }
-            }}
+            onClick={() => setCreateOpen(true)}
             className="neo-btn rounded-sm bg-neo-blue px-5 py-3 text-white"
           >
             Create Folder
@@ -217,6 +204,26 @@ export default function Vault() {
           onClose={closePreview}
         />
       )}
+
+      <CreateFolderDialog
+        open={createOpen}
+        onCancel={() => setCreateOpen(false)}
+        onCreate={async (name) => {
+          setCreateOpen(false);
+          setUploading(true);
+          setError(null);
+          setNotice(null);
+          try {
+            await createFolder(name);
+            setNotice(`Created folder: ${name}`);
+            await refresh();
+          } catch (err) {
+            setError(err instanceof Error ? err.message : "Failed to create folder.");
+          } finally {
+            setUploading(false);
+          }
+        }}
+      />
     </div>
   );
 }

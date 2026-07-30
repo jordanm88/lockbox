@@ -315,10 +315,6 @@ fn get_entry_for_path<'a>(index: &'a VaultIndex, path: &str) -> Option<&'a Vault
     index.entries.iter().find(|entry| entry.original_path == path)
 }
 
-fn get_entry_for_path_mut<'a>(index: &'a mut VaultIndex, path: &str) -> Option<&'a mut VaultIndexEntry> {
-    index.entries.iter_mut().find(|entry| entry.original_path == path)
-}
-
 fn prune_empty_directories(index: &mut VaultIndex) {
     loop {
         let mut removed_any = false;

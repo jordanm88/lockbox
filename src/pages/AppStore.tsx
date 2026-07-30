@@ -99,6 +99,10 @@ export default function AppStore() {
 
       {loading ? (
         <p className="font-black uppercase">Loading catalog…</p>
+      ) : apps.length === 0 ? (
+        <div className="neo-card p-8 text-center font-black uppercase text-ink/70">
+          No catalog apps are available yet.
+        </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {apps.map((app) => {

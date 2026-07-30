@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import PageHeader from "../components/PageHeader";
 import VaultFilePreview from "../components/VaultFilePreview";
-import { encryptAndSaveFile, listVaultFiles, readAndDecryptFile, VaultFileEntry } from "../lib/vaultBridge";
+import { createFolder, encryptAndSaveFile, listVaultFiles, readAndDecryptFile, VaultFileEntry } from "../lib/vaultBridge";
 import { mimeTypeFor } from "../lib/mime";
 
 function formatSize(bytes: number): string {
@@ -33,6 +33,7 @@ export default function Vault() {
   const [notice, setNotice] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
   async function refresh() {
     try {
@@ -57,10 +58,11 @@ export default function Vault() {
     try {
       const renamed: string[] = [];
       for (const file of Array.from(fileList)) {
+        const relativePath = (file as any).webkitRelativePath || file.name;
         const bytes = new Uint8Array(await file.arrayBuffer());
-        const savedAs = await encryptAndSaveFile(file.name, bytes);
-        if (savedAs !== file.name) {
-          renamed.push(`${file.name} → ${savedAs}`);
+        const savedAs = await encryptAndSaveFile(relativePath, bytes);
+        if (savedAs !== relativePath) {
+          renamed.push(`${relativePath} → ${savedAs}`);
         }
       }
       if (renamed.length > 0) {
@@ -99,22 +101,69 @@ export default function Vault() {
       <PageHeader icon="🔐" title="Vault" subtitle="Files stay encrypted on this drive. Nothing touches the host disk." />
 
       <div className="neo-panel mb-6 flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
-        <p className="font-black uppercase text-ink">
-          {loading ? "Loading…" : `${files.length} item${files.length === 1 ? "" : "s"}`}
-        </p>
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          disabled={uploading}
-          className="neo-btn rounded-sm bg-neo-green px-5 py-3 text-white"
-        >
-          {uploading ? "Encrypting…" : "⬆️ Upload Files"}
-        </button>
+        <div>
+          <p className="font-black uppercase text-ink">
+            {loading ? "Loading…" : `${files.length} item${files.length === 1 ? "" : "s"}`}
+          </p>
+          <p className="text-sm text-ink/60">Upload files or folders, and create nested folders directly inside the vault.</p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={uploading}
+            className="neo-btn rounded-sm bg-neo-green px-5 py-3 text-white"
+          >
+            {uploading ? "Encrypting…" : "⬆️ Upload Files"}
+          </button>
+          <button
+            type="button"
+            onClick={() => folderInputRef.current?.click()}
+            disabled={uploading}
+            className="neo-btn rounded-sm bg-neo-cyan px-5 py-3 text-ink"
+          >
+            {uploading ? "Encrypting…" : "📁 Upload Folder"}
+          </button>
+          <button
+            type="button"
+            disabled={uploading}
+            onClick={async () => {
+              const folderName = window.prompt("Create folder in vault:");
+              if (!folderName) return;
+              setUploading(true);
+              setError(null);
+              setNotice(null);
+              try {
+                await createFolder(folderName);
+                setNotice(`Created folder: ${folderName}`);
+                await refresh();
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "Failed to create folder.");
+              } finally {
+                setUploading(false);
+              }
+            }}
+            className="neo-btn rounded-sm bg-neo-blue px-5 py-3 text-white"
+          >
+            Create Folder
+          </button>
+        </div>
         <input
           ref={inputRef}
           type="file"
           multiple
           className="hidden"
+          onChange={(event) => handleFilesChosen(event.target.files)}
+        />
+        <input
+          ref={folderInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          {...{
+            webkitdirectory: true,
+            directory: true,
+          }}
           onChange={(event) => handleFilesChosen(event.target.files)}
         />
       </div>
@@ -144,7 +193,7 @@ export default function Vault() {
 
         {!loading && files.length === 0 && (
           <div className="neo-panel col-span-full p-8 text-center font-black uppercase text-ink/60">
-            Vault is empty. Upload something.
+            Vault is empty. Upload files or folders to start.
           </div>
         )}
       </div>

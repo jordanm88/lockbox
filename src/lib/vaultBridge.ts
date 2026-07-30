@@ -21,6 +21,10 @@ export function listVaultFiles(): Promise<VaultFileEntry[]> {
   return invoke<VaultFileEntry[]>("list_vault_files");
 }
 
+export function createFolder(relativePath: string): Promise<void> {
+  return invoke<void>("create_folder", { relativePath });
+}
+
 /**
  * Returns the name the file was actually saved under — the backend
  * auto-renames on a collision (e.g. "photo.jpg" -> "photo (1).jpg") rather

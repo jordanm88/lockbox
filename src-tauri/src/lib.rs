@@ -31,6 +31,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::unlock_vault,
             commands::lock_vault,
+            commands::create_folder,
             commands::encrypt_and_save_file,
             commands::read_and_decrypt_file,
             commands::list_vault_files,

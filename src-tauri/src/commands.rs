@@ -125,30 +125,50 @@ pub fn read_and_decrypt_file(
     crypto::decrypt_bytes(key, &sealed)
 }
 
+fn collect_vault_files(base_dir: &std::path::Path, dir: &std::path::Path, entries: &mut Vec<VaultFileEntry>) -> Result<(), String> {
+    for entry in std::fs::read_dir(dir).map_err(|e| format!("failed to read vault entry: {e}"))? {
+        let entry = entry.map_err(|e| format!("failed to read vault entry: {e}"))?;
+        let path = entry.path();
+        let metadata = entry
+            .metadata()
+            .map_err(|e| format!("failed to stat {}: {e}", entry.file_name().to_string_lossy()))?;
+
+        if metadata.is_dir() {
+            let name = entry.file_name().to_string_lossy();
+            if name.starts_with('.') {
+                continue;
+            }
+            collect_vault_files(base_dir, &path, entries)?;
+        } else if metadata.is_file() {
+            let relative = path
+                .strip_prefix(base_dir)
+                .map_err(|_| "internal error computing vault path".to_string())?;
+            let relative_name = relative.to_string_lossy().replace('\\', "/");
+            entries.push(VaultFileEntry {
+                name: relative_name,
+                size: metadata.len(),
+            });
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn create_folder(state: State<AppState>, relative_path: String) -> Result<(), String> {
+    let guard = lock_recover(&state.vault_key);
+    guard.as_ref().ok_or("vault is locked")?;
+
+    let vault_dir = usb_root::vault_dir(&state.root);
+    let dest_path = paths::safe_join(&vault_dir, &relative_path)?;
+    std::fs::create_dir_all(&dest_path).map_err(|e| format!("failed to create folder: {e}"))
+}
+
 #[tauri::command]
 pub fn list_vault_files(state: State<AppState>) -> Result<Vec<VaultFileEntry>, String> {
     let vault_dir = usb_root::vault_dir(&state.root);
     let mut entries = Vec::new();
 
-    let read_dir =
-        std::fs::read_dir(&vault_dir).map_err(|e| format!("failed to read vault: {e}"))?;
-
-    for entry in read_dir {
-        let entry = entry.map_err(|e| format!("failed to read vault entry: {e}"))?;
-        let name = entry.file_name().to_string_lossy().to_string();
-        if name.starts_with('.') {
-            continue; // skips the .lockbox metadata directory
-        }
-        let metadata = entry
-            .metadata()
-            .map_err(|e| format!("failed to stat {name}: {e}"))?;
-        if metadata.is_file() {
-            entries.push(VaultFileEntry {
-                name,
-                size: metadata.len(),
-            });
-        }
-    }
+    collect_vault_files(&vault_dir, &vault_dir, &mut entries)?;
 
     entries.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(entries)

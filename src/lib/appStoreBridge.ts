@@ -7,6 +7,7 @@ export interface CatalogEntry {
   description: string;
   icon: string;
   homepage: string | null;
+  category: string | null;
   available: boolean;
   installed: boolean;
   launcherPath: string | null;

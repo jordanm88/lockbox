@@ -25,6 +25,8 @@ pub struct CatalogApp {
     pub icon: String,
     #[serde(default)]
     pub homepage: Option<String>,
+    #[serde(default)]
+    pub category: Option<String>,
     pub targets: TargetsByOs,
 }
 

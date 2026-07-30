@@ -5,41 +5,14 @@
       "id": "sumatra-pdf",
       "name": "SumatraPDF",
       "description": "Lightweight PDF and document reader that runs from the app folder.",
-      "icon": "PDF",
+      "icon": "📕",
       "homepage": "https://www.sumatrapdfreader.org/free-pdf-reader",
+      "category": "Office",
       "targets": {
         "windows": {
           "url": "https://www.sumatrapdfreader.org/dl/rel/3.6.1/SumatraPDF-3.6.1-64.zip",
           "archiveType": "zip",
-          "launcher": "SumatraPDF.exe"
-        }
-      }
-    },
-    {
-      "id": "firefox",
-      "name": "Firefox",
-      "description": "Portable browser installed into the vault drive and launched from the App Store.",
-      "icon": "🌐",
-      "homepage": "https://www.mozilla.org/firefox/",
-      "targets": {
-        "windows": {
-          "url": "https://sourceforge.net/projects/portableapps/files/Mozilla%20Firefox%2C%20Portable%20Ed./latest/download",
-          "archiveType": "installer",
-          "launcher": "FirefoxPortable.exe"
-        }
-      }
-    },
-    {
-      "id": "thunderbird",
-      "name": "Mozilla Thunderbird",
-      "description": "Portable mail client installed into the vault drive and launched from the App Store.",
-      "icon": "✉️",
-      "homepage": "https://www.thunderbird.net/",
-      "targets": {
-        "windows": {
-          "url": "https://sourceforge.net/projects/portableapps/files/Mozilla%20Thunderbird%2C%20P.E./latest/download",
-          "archiveType": "installer",
-          "launcher": "ThunderbirdPortable.exe"
+          "launcher": "SumatraPDF-3.6.1-64.exe"
         }
       }
     },
@@ -47,8 +20,9 @@
       "id": "vscode",
       "name": "Visual Studio Code",
       "description": "Portable code editor archive with the regular Code.exe launcher.",
-      "icon": "VS",
+      "icon": "🧩",
       "homepage": "https://code.visualstudio.com/",
+      "category": "Development",
       "targets": {
         "windows": {
           "url": "https://update.code.visualstudio.com/latest/win32-x64-archive/stable",
@@ -61,8 +35,9 @@
       "id": "notepadpp-portable",
       "name": "Notepad++ Portable",
       "description": "Portable source-code editor with syntax highlighting and tabs.",
-      "icon": "TXT",
+      "icon": "📝",
       "homepage": "https://notepad-plus-plus.org/downloads/",
+      "category": "Development",
       "targets": {
         "windows": {
           "url": "https://github.com/notepad-plus-plus/notepad-plus-plus/releases/download/v8.7.7/npp.8.7.7.portable.x64.zip",
@@ -75,8 +50,9 @@
       "id": "jq",
       "name": "jq",
       "description": "Command-line JSON processor (single executable).",
-      "icon": "JSON",
+      "icon": "🔧",
       "homepage": "https://jqlang.github.io/jq/",
+      "category": "Utilities",
       "targets": {
         "windows": {
           "url": "https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-windows-amd64.exe",

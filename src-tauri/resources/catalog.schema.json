@@ -28,6 +28,10 @@
         "description": { "type": "string" },
         "icon": { "type": "string", "description": "A single emoji glyph." },
         "homepage": { "type": "string", "format": "uri" },
+        "category": {
+          "type": "string",
+          "description": "Grouping shown as a filter chip in the App Store UI, e.g. 'Office', 'Development', 'Utilities'."
+        },
         "targets": {
           "type": "object",
           "minProperties": 1,
@@ -49,7 +53,7 @@
         "archiveType": {
           "type": "string",
           "enum": ["zip", "tar.gz", "appimage", "binary", "exe", "installer"],
-          "description": "zip/tar.gz are extracted into Apps/<id>/; appimage/binary/exe are saved as single files; installer runs a silent Windows setup into Apps/<id>/.",
+          "description": "zip/tar.gz are extracted into Apps/<id>/; appimage/binary/exe are saved as single files; installer runs a silent Windows setup into Apps/<id>/."
         },
         "sha256": {
           "type": "string",

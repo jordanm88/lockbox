@@ -1,25 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import PageHeader from "../components/PageHeader";
 import VaultFilePreview from "../components/VaultFilePreview";
-import { createFolder, encryptAndSaveFile, listVaultFiles, readAndDecryptFile, VaultFileEntry } from "../lib/vaultBridge";
+import VaultTreeView from "../components/VaultTreeView";
+import { createFolder, encryptAndSaveFile, listVaultFiles, readAndDecryptFile, VaultFileEntry, deleteVaultEntry } from "../lib/vaultBridge";
 import { mimeTypeFor } from "../lib/mime";
 import CreateFolderDialog from "../components/CreateFolderDialog";
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function iconFor(name: string, isDir?: boolean): string {
-  if (isDir) return "📁";
-  const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  if (["png", "jpg", "jpeg", "gif", "webp"].includes(ext)) return "🖼️";
-  if (ext === "pdf") return "📕";
-  if (["doc", "docx", "txt", "md"].includes(ext)) return "📄";
-  if (["zip", "7z", "rar"].includes(ext)) return "🗜️";
-  return "📦";
-}
+import ConfirmDialog from "../components/ConfirmDialog";
 
 interface PreviewState {
   name: string;
@@ -35,6 +21,8 @@ export default function Vault() {
   const [notice, setNotice] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<VaultFileEntry | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
@@ -92,6 +80,31 @@ export default function Vault() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to decrypt file.");
     }
+  }
+
+  function requestDelete(entry: VaultFileEntry) {
+    setConfirmTarget(entry);
+    setConfirmOpen(true);
+  }
+
+  async function confirmDelete() {
+    if (!confirmTarget) return;
+    setConfirmOpen(false);
+    setUploading(true);
+    try {
+      await deleteVaultEntry(confirmTarget.name);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete entry.");
+    } finally {
+      setUploading(false);
+      setConfirmTarget(null);
+    }
+  }
+
+  function cancelDelete() {
+    setConfirmOpen(false);
+    setConfirmTarget(null);
   }
 
   function closePreview() {
@@ -163,36 +176,11 @@ export default function Vault() {
         <p className="neo-card mb-6 bg-neo-yellow px-4 py-3 font-bold">{notice}</p>
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {files.map((file) => (
-          <div
-            key={file.name}
-            className={
-              "neo-panel flex items-center gap-4 p-5 text-left transition-transform duration-150 " +
-              (file.isDir ? "" : "hover:-translate-y-1 hover:shadow-brutal-sm")
-            }
-          >
-            <span className="text-4xl">{iconFor(file.name, file.isDir)}</span>
-            <div className="min-w-0">
-              <p className="truncate text-lg font-black text-ink">{file.name}</p>
-              <p className="mt-1 text-sm font-bold text-ink/60">{file.isDir ? "Folder" : formatSize(file.size)}</p>
-            </div>
-            {!file.isDir && (
-              <button
-                type="button"
-                onClick={() => handleView(file)}
-                className="ml-auto text-sm font-bold text-neo-blue"
-              >
-                View
-              </button>
-            )}
-          </div>
-        ))}
-
-        {!loading && files.length === 0 && (
-          <div className="neo-panel col-span-full p-8 text-center font-black uppercase text-ink/60">
-            Vault is empty. Upload files or folders to start.
-          </div>
+      <div className="">
+        {files.length === 0 && !loading ? (
+          <div className="neo-panel p-8 text-center font-black uppercase text-ink/60">Vault is empty. Upload files or folders to start.</div>
+        ) : (
+          <VaultTreeView entries={files} onView={handleView} onDelete={requestDelete} />
         )}
       </div>
 
@@ -223,6 +211,16 @@ export default function Vault() {
             setUploading(false);
           }
         }}
+      />
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title={confirmTarget ? `Delete ${confirmTarget.name}?` : "Delete entry"}
+        description={confirmTarget ? "This action will permanently remove the file from the vault." : undefined}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
       />
     </div>
   );

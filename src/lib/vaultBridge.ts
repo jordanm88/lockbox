@@ -42,3 +42,7 @@ export async function readAndDecryptFile(relativePath: string): Promise<Uint8Arr
   const bytes = await invoke<number[]>("read_and_decrypt_file", { relativePath });
   return new Uint8Array(bytes);
 }
+
+export function deleteVaultEntry(relativePath: string): Promise<void> {
+  return invoke<void>("delete_vault_entry", { relativePath });
+}

@@ -100,12 +100,21 @@ jobs:
         with:
           path: artifacts
 
+      # Only the raw portable exe, not the whole artifact tree — `bundle/`
+      # also contains the MSI/NSIS installers, which aren't what the
+      # in-app updater downloads and were never the intended distribution
+      # artifact for a portable app (see docs/DISTRIBUTION.md). Matching
+      # both casings since the exact binary name has moved between
+      # `lockbox.exe` and `Lockbox.exe` across earlier changes.
       - name: Create draft GitHub release
         uses: softprops/action-gh-release@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           draft: false
-          files: artifacts/**/*
+          fail_on_unmatched_files: true
+          files: |
+            artifacts/**/Lockbox.exe
+            artifacts/**/lockbox.exe
 
   publish_optional:
     needs: build
@@ -122,4 +131,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           draft: false
-          files: artifacts/**/*
+          fail_on_unmatched_files: true
+          files: |
+            artifacts/**/Lockbox.exe
+            artifacts/**/lockbox.exe

@@ -23,7 +23,7 @@
       "homepage": "https://www.mozilla.org/firefox/",
       "targets": {
         "windows": {
-          "url": "https://sourceforge.net/projects/portableapps/files/Mozilla%20Firefox%2C%20Portable%20Ed./download",
+          "url": "https://sourceforge.net/projects/portableapps/files/Mozilla%20Firefox%2C%20Portable%20Ed./latest/download",
           "archiveType": "installer",
           "launcher": "FirefoxPortable.exe"
         }
@@ -37,7 +37,7 @@
       "homepage": "https://www.thunderbird.net/",
       "targets": {
         "windows": {
-          "url": "https://sourceforge.net/projects/portableapps/files/Mozilla%20Thunderbird%2C%20P.E./download",
+          "url": "https://sourceforge.net/projects/portableapps/files/Mozilla%20Thunderbird%2C%20P.E./latest/download",
           "archiveType": "installer",
           "launcher": "ThunderbirdPortable.exe"
         }

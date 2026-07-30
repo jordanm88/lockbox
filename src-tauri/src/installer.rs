@@ -264,32 +264,92 @@ fn install_windows_installer(
 
     #[cfg(windows)]
     {
+        if !is_probably_windows_exe(bytes) {
+            return Err(
+                "downloaded installer is not a Windows executable (likely an HTML/download page instead of the file). Try again, or update the catalog entry URL.".to_string(),
+            );
+        }
+
         let temp_name = format!("lockbox-{app_id}-installer.exe");
         let temp_path = env::temp_dir().join(temp_name);
         std::fs::write(&temp_path, bytes)
             .map_err(|e| format!("failed to stage installer: {e}"))?;
 
         let install_dir_string = install_dir.to_string_lossy().to_string();
-        let status = std::process::Command::new(&temp_path)
+
+        // Try standard NSIS-style silent install first.
+        let first_try = std::process::Command::new(&temp_path)
             .arg("/S")
             .arg(format!("/D={install_dir_string}"))
-            .status()
+            .output()
             .map_err(|e| format!("failed to launch installer: {e}"))?;
+
+        // PortableApps installers often use /SILENT + /DESTINATION.
+        let needs_fallback = !first_try.status.success()
+            || !paths::safe_join(install_dir, launcher_name)?.is_file();
+
+        let mut fallback_output_text = String::new();
+        if needs_fallback {
+            let second_try = std::process::Command::new(&temp_path)
+                .arg("/SILENT")
+                .arg(format!("/DESTINATION={install_dir_string}"))
+                .output()
+                .map_err(|e| format!("failed to launch installer fallback mode: {e}"))?;
+
+            if !second_try.status.success() {
+                let first_err = String::from_utf8_lossy(&first_try.stderr).trim().to_string();
+                let second_err = String::from_utf8_lossy(&second_try.stderr).trim().to_string();
+                let first_out = String::from_utf8_lossy(&first_try.stdout).trim().to_string();
+                let second_out = String::from_utf8_lossy(&second_try.stdout).trim().to_string();
+
+                let _ = std::fs::remove_file(&temp_path);
+
+                return Err(format!(
+                    "installer failed in both modes (NSIS and PortableApps). First mode status: {}. Second mode status: {}. First stderr: {}. Second stderr: {}. First stdout: {}. Second stdout: {}",
+                    first_try.status,
+                    second_try.status,
+                    if first_err.is_empty() { "<empty>" } else { &first_err },
+                    if second_err.is_empty() { "<empty>" } else { &second_err },
+                    if first_out.is_empty() { "<empty>" } else { &first_out },
+                    if second_out.is_empty() { "<empty>" } else { &second_out }
+                ));
+            }
+
+            fallback_output_text = String::from_utf8_lossy(&second_try.stderr).trim().to_string();
+        } else if !first_try.status.success() {
+            let _ = std::fs::remove_file(&temp_path);
+            let stderr = String::from_utf8_lossy(&first_try.stderr).trim().to_string();
+            let stdout = String::from_utf8_lossy(&first_try.stdout).trim().to_string();
+            return Err(format!(
+                "installer exited with status {}. stderr: {}. stdout: {}",
+                first_try.status,
+                if stderr.is_empty() { "<empty>" } else { &stderr },
+                if stdout.is_empty() { "<empty>" } else { &stdout }
+            ));
+        }
 
         let _ = std::fs::remove_file(&temp_path);
 
-        if !status.success() {
-            return Err(format!("installer exited with status {status}"));
-        }
-
         let launcher_path = paths::safe_join(install_dir, launcher_name)?;
         if !launcher_path.is_file() {
-            return Err(format!("installer did not create expected launcher: {}", launcher_path.display()));
+            return Err(format!(
+                "installer did not create expected launcher: {}{}",
+                launcher_path.display(),
+                if fallback_output_text.is_empty() {
+                    "".to_string()
+                } else {
+                    format!(" (fallback stderr: {fallback_output_text})")
+                }
+            ));
         }
 
         let _ = app_handle;
         Ok(())
     }
+}
+
+fn is_probably_windows_exe(bytes: &[u8]) -> bool {
+    bytes.len() >= 2 && bytes[0] == b'M' && bytes[1] == b'Z'
 }
 
 #[cfg(unix)]

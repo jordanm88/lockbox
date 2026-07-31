@@ -1,5 +1,8 @@
 import { FormEvent, useEffect, useState } from "react";
 import { vaultExists } from "../lib/vaultBridge";
+import pkg from "../../package.json";
+
+const CURRENT_YEAR = new Date().getFullYear();
 
 interface LockScreenProps {
   onUnlock: (passphrase: string) => Promise<boolean>;
@@ -72,7 +75,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
   const buttonText = freshInstall ? "Create Master Passphrase" : "Unlock Vault";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-slate-950/70 p-4 backdrop-blur-sm">
       <form
         onSubmit={handleSubmit}
         className={`neo-panel w-full max-w-md border-slate-200 bg-white p-8 ${shake ? "animate-shake" : ""}`}
@@ -81,7 +84,12 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
           <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-neo-blue text-4xl text-white shadow-brutal">
             🔒
           </div>
-          <h1 className="mt-4 text-4xl font-extrabold tracking-tight text-ink">Lockbox</h1>
+          <div className="mt-4 flex items-center justify-center gap-2">
+            <h1 className="text-4xl font-extrabold tracking-tight text-ink">Lockbox</h1>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">
+              v{pkg.version}
+            </span>
+          </div>
           <p className="mt-2 text-sm font-semibold text-slate-700">{title}</p>
           <p className="mt-2 text-sm text-slate-600">{subtitle}</p>
         </div>
@@ -155,6 +163,23 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
           </>
         )}
       </form>
+
+      <div className="text-center text-xs text-white/60">
+        <p>
+          Designed &amp; engineered by{" "}
+          <a
+            href="https://jordan-mitchell.co.uk"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-white/90 underline decoration-white/30 underline-offset-2 transition hover:text-white hover:decoration-white/70"
+          >
+            Jordan Mitchell ↗
+          </a>
+        </p>
+        <p className="mt-1 text-white/40">
+          © {CURRENT_YEAR} Jordan Mitchell. All rights reserved.
+        </p>
+      </div>
     </div>
   );
 }

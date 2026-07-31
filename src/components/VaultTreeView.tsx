@@ -4,6 +4,7 @@ import type { VaultFileEntry } from "../lib/vaultBridge";
 interface Props {
   entries: VaultFileEntry[];
   searchQuery?: string;
+  onClearSearch?: () => void;
   onView: (entry: VaultFileEntry) => void;
   onDelete: (entry: VaultFileEntry) => void;
 }
@@ -63,11 +64,19 @@ function fileVisual(name: string, isDir: boolean): FileVisual {
   return { icon: "📦", bg: "bg-slate-100", text: "text-slate-500" };
 }
 
-export default function VaultTreeView({ entries, searchQuery = "", onView, onDelete }: Props) {
+export default function VaultTreeView({ entries, searchQuery = "", onClearSearch, onView, onDelete }: Props) {
   const [currentPath, setCurrentPath] = useState("");
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
 
   const isSearching = searchQuery.trim().length > 0;
+
+  // Clicking a folder always has to leave "search results" mode — otherwise
+  // the flat, whole-vault search view stays on screen and setCurrentPath
+  // has no visible effect, which reads as "the folder won't open."
+  function openFolder(path: string) {
+    if (isSearching) onClearSearch?.();
+    setCurrentPath(path);
+  }
   const pathSet = useMemo(() => new Set(entries.filter((e) => e.isDir).map((e) => e.name)), [entries]);
   const currentLabel = currentPath ? currentPath.split("/")[currentPath.split("/").length - 1] ?? "Vault" : "My Vault";
 
@@ -222,7 +231,7 @@ export default function VaultTreeView({ entries, searchQuery = "", onView, onDel
                       >
                         <button
                           type="button"
-                          onClick={row.isDir ? () => setCurrentPath(row.fullPath) : () => onView(full)}
+                          onClick={row.isDir ? () => openFolder(row.fullPath) : () => onView(full)}
                           className="flex min-w-0 items-center gap-3 text-left"
                         >
                           <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-lg ${visual.bg} ${visual.text}`}>
@@ -241,7 +250,7 @@ export default function VaultTreeView({ entries, searchQuery = "", onView, onDel
 
                         <div className="flex items-center justify-end gap-2">
                           {row.isDir ? (
-                            <button type="button" onClick={() => setCurrentPath(row.fullPath)} className="rounded-full px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50">
+                            <button type="button" onClick={() => openFolder(row.fullPath)} className="rounded-full px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50">
                               Open
                             </button>
                           ) : (
@@ -275,7 +284,7 @@ export default function VaultTreeView({ entries, searchQuery = "", onView, onDel
                     <div key={row.fullPath} className="rounded-2xl border border-slate-200 bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-md">
                       <button
                         type="button"
-                        onClick={row.isDir ? () => setCurrentPath(row.fullPath) : () => onView(full)}
+                        onClick={row.isDir ? () => openFolder(row.fullPath) : () => onView(full)}
                         className="flex w-full flex-col items-center gap-3 text-center"
                       >
                         <div className={`flex h-16 w-16 items-center justify-center rounded-2xl text-3xl ${visual.bg} ${visual.text}`}>
@@ -287,7 +296,7 @@ export default function VaultTreeView({ entries, searchQuery = "", onView, onDel
 
                       <div className="mt-3 flex items-center justify-center gap-2">
                         {row.isDir ? (
-                          <button type="button" onClick={() => setCurrentPath(row.fullPath)} className="rounded-full px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50">
+                          <button type="button" onClick={() => openFolder(row.fullPath)} className="rounded-full px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50">
                             Open
                           </button>
                         ) : (

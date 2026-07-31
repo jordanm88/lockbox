@@ -407,7 +407,13 @@ export default function Vault() {
           <p className="mt-1 text-sm text-slate-500">Drag files or folders anywhere on this page, or use the "+ New" button above.</p>
         </div>
       ) : (
-        <VaultTreeView entries={files} searchQuery={searchQuery} onView={handleView} onDelete={requestDelete} />
+        <VaultTreeView
+          entries={files}
+          searchQuery={searchQuery}
+          onClearSearch={() => setSearchQuery("")}
+          onView={handleView}
+          onDelete={requestDelete}
+        />
       )}
 
       {/* Full-page overlay while dragging a file over the window, not just a small drop target */}

@@ -9,7 +9,14 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 
-const DOWNLOAD_TIMEOUT_SECS: u64 = 600;
+// A stalled/dead connection would otherwise sit for the full timeout before
+// failing, which for a portable-app-sized download reads as "the app is
+// unresponsive" long before it actually gives up. These are single/couple
+// hundred MB files; 3 minutes is generous for a working connection and fails
+// fast on a dead one.
+const DOWNLOAD_TIMEOUT_SECS: u64 = 180;
+#[cfg(windows)]
+const INSTALLER_TIMEOUT: Duration = Duration::from_secs(120);
 const PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(120);
 /// Generous cap for a portable app archive — mainly a guard against a
 /// misconfigured or compromised catalog entry pointing at something huge (or
@@ -278,11 +285,15 @@ fn install_windows_installer(
         let install_dir_string = install_dir.to_string_lossy().to_string();
 
         // Try standard NSIS-style silent install first.
-        let first_try = std::process::Command::new(&temp_path)
-            .arg("/S")
-            .arg(format!("/D={install_dir_string}"))
-            .output()
-            .map_err(|e| format!("failed to launch installer: {e}"))?;
+        let mut first_command = std::process::Command::new(&temp_path);
+        first_command.arg("/S").arg(format!("/D={install_dir_string}"));
+        let first_try = match run_with_timeout(first_command, INSTALLER_TIMEOUT) {
+            Ok(output) => output,
+            Err(e) => {
+                let _ = std::fs::remove_file(&temp_path);
+                return Err(e);
+            }
+        };
 
         // PortableApps installers often use /SILENT + /DESTINATION.
         let needs_fallback = !first_try.status.success()
@@ -290,11 +301,15 @@ fn install_windows_installer(
 
         let mut fallback_output_text = String::new();
         if needs_fallback {
-            let second_try = std::process::Command::new(&temp_path)
-                .arg("/SILENT")
-                .arg(format!("/DESTINATION={install_dir_string}"))
-                .output()
-                .map_err(|e| format!("failed to launch installer fallback mode: {e}"))?;
+            let mut second_command = std::process::Command::new(&temp_path);
+            second_command.arg("/SILENT").arg(format!("/DESTINATION={install_dir_string}"));
+            let second_try = match run_with_timeout(second_command, INSTALLER_TIMEOUT) {
+                Ok(output) => output,
+                Err(e) => {
+                    let _ = std::fs::remove_file(&temp_path);
+                    return Err(e);
+                }
+            };
 
             if !second_try.status.success() {
                 let first_err = String::from_utf8_lossy(&first_try.stderr).trim().to_string();
@@ -346,6 +361,69 @@ fn install_windows_installer(
         let _ = app_handle;
         Ok(())
     }
+}
+
+/// Runs `command` to completion, capturing stdout/stderr, but kills it and
+/// returns an error if it hasn't exited within `timeout` — replaces a plain
+/// `.output()` call, which blocks forever if the installer pops up a dialog
+/// it can't show (e.g. a silent-install flag it doesn't actually support),
+/// which is exactly what made an install attempt look like it froze the app.
+#[cfg(windows)]
+fn run_with_timeout(
+    mut command: std::process::Command,
+    timeout: Duration,
+) -> Result<std::process::Output, String> {
+    command
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+
+    let mut child = command
+        .spawn()
+        .map_err(|e| format!("failed to launch installer: {e}"))?;
+
+    // Drain stdout/stderr on separate threads while polling for exit below —
+    // reading them only after exit (like `.output()` does) risks a deadlock
+    // if the child fills a pipe buffer while nothing is draining it.
+    let stdout_pipe = child.stdout.take();
+    let stderr_pipe = child.stderr.take();
+    let stdout_handle = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        if let Some(mut pipe) = stdout_pipe {
+            let _ = pipe.read_to_end(&mut buf);
+        }
+        buf
+    });
+    let stderr_handle = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        if let Some(mut pipe) = stderr_pipe {
+            let _ = pipe.read_to_end(&mut buf);
+        }
+        buf
+    });
+
+    let start = Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {
+                if start.elapsed() > timeout {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!(
+                        "installer did not finish within {} seconds — it may be waiting on a dialog it can't show because the silent-install flag isn't actually supported. Aborted rather than hang.",
+                        timeout.as_secs()
+                    ));
+                }
+                std::thread::sleep(Duration::from_millis(200));
+            }
+            Err(e) => return Err(format!("failed to wait for installer: {e}")),
+        }
+    };
+
+    let stdout = stdout_handle.join().unwrap_or_default();
+    let stderr = stderr_handle.join().unwrap_or_default();
+
+    Ok(std::process::Output { status, stdout, stderr })
 }
 
 fn is_probably_windows_exe(bytes: &[u8]) -> bool {

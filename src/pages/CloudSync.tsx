@@ -15,6 +15,23 @@ import {
 type Provider = CloudRemoteConfig["provider"];
 type SyncStatus = "idle" | "running" | "success" | "failed";
 
+interface CloudSyncProps {
+  autoSyncEnabled: boolean;
+  onToggleAutoSync: (next: boolean) => void;
+  autoSyncIntervalMinutes: number;
+  onChangeAutoSyncInterval: (next: number) => void;
+  lastAutoSyncAt: string | null;
+  lastAutoSyncError: string | null;
+}
+
+const AUTO_SYNC_INTERVALS = [
+  { label: "Every 15 minutes", minutes: 15 },
+  { label: "Every 30 minutes", minutes: 30 },
+  { label: "Every hour", minutes: 60 },
+  { label: "Every 6 hours", minutes: 360 },
+  { label: "Once a day", minutes: 1440 },
+];
+
 const PROVIDERS: { id: Provider; label: string; icon: string }[] = [
   { id: "s3", label: "S3", icon: "🪣" },
   { id: "webdav", label: "WebDAV", icon: "🌐" },
@@ -78,7 +95,14 @@ function StatusBadge({ status }: { status: SyncStatus }) {
   return <span className={`rounded-full px-3 py-1 text-sm font-semibold ${className}`}>{label}</span>;
 }
 
-export default function CloudSync() {
+export default function CloudSync({
+  autoSyncEnabled,
+  onToggleAutoSync,
+  autoSyncIntervalMinutes,
+  onChangeAutoSyncInterval,
+  lastAutoSyncAt,
+  lastAutoSyncError,
+}: CloudSyncProps) {
   const [config, setConfig] = useState<CloudRemoteConfig>(defaultConfigFor("s3"));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -330,6 +354,52 @@ export default function CloudSync() {
           >
             {isRunning ? "Syncing…" : "🔄 Sync Vault Now"}
           </button>
+
+          <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-ink">Auto-sync</p>
+                <p className="text-xs text-slate-500">
+                  Runs in the background on this schedule while the vault is unlocked, no matter which tab is open.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={autoSyncEnabled}
+                onClick={() => onToggleAutoSync(!autoSyncEnabled)}
+                className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${autoSyncEnabled ? "bg-blue-600" : "bg-slate-200"}`}
+              >
+                <span
+                  className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${autoSyncEnabled ? "translate-x-6" : "translate-x-1"}`}
+                />
+              </button>
+            </div>
+
+            {autoSyncEnabled && (
+              <div className="mt-3 space-y-2">
+                <select
+                  value={autoSyncIntervalMinutes}
+                  onChange={(event) => onChangeAutoSyncInterval(Number(event.target.value))}
+                  className="neo-input w-full px-3 py-2 text-sm"
+                >
+                  {AUTO_SYNC_INTERVALS.map((option) => (
+                    <option key={option.minutes} value={option.minutes}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-500">
+                  Last auto-sync: {lastAutoSyncAt ? new Date(lastAutoSyncAt).toLocaleString() : "Not yet run"}
+                </p>
+                {lastAutoSyncError && (
+                  <p className="rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700">
+                    Last auto-sync error: {lastAutoSyncError}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
 
           <div
             ref={outputRef}

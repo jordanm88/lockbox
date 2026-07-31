@@ -4,14 +4,16 @@ interface PageHeaderProps {
   subtitle: string;
 }
 
+// Deliberately plain — Drive/Dropbox/OneDrive don't put page titles inside a
+// boxed, colored banner, just a heading + a line of muted helper text.
 export default function PageHeader({ icon, title, subtitle }: PageHeaderProps) {
   return (
-    <div className="neo-card mb-8 border-slate-200 bg-white/85 px-6 py-6 backdrop-blur-sm">
-      <h2 className="flex items-center gap-3 text-3xl font-extrabold tracking-tight text-ink">
-        <span>{icon}</span>
+    <div className="mb-6">
+      <h2 className="flex items-center gap-2.5 text-2xl font-bold tracking-tight text-ink">
+        <span className="text-2xl">{icon}</span>
         {title}
       </h2>
-      <p className="mt-2 max-w-3xl text-sm font-medium text-slate-600">{subtitle}</p>
+      <p className="mt-1 max-w-3xl text-sm text-slate-500">{subtitle}</p>
     </div>
   );
 }

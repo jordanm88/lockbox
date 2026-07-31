@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import PageHeader from "../components/PageHeader";
 import VaultFilePreview from "../components/VaultFilePreview";
 import VaultTreeView from "../components/VaultTreeView";
+import NewMenu from "../components/NewMenu";
+import UploadToast from "../components/UploadToast";
 import { createFolder, encryptAndSaveFile, listVaultFiles, readAndDecryptFile, VaultFileEntry, deleteVaultEntry } from "../lib/vaultBridge";
 import { mimeTypeFor } from "../lib/mime";
 import CreateFolderDialog from "../components/CreateFolderDialog";
 import ConfirmDialog from "../components/ConfirmDialog";
-import DropHint from "../components/DropHint";
 import UploadPreviewPanel from "../components/UploadPreviewPanel";
 
 type FileWithPath = {
@@ -67,8 +68,10 @@ export default function Vault() {
   const [dragActive, setDragActive] = useState(false);
   const [pendingUpload, setPendingUpload] = useState<FileWithPath[]>([]);
   const [uploadProgress, setUploadProgress] = useState<UploadProgressState | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const dragCounter = useRef(0);
 
   async function refresh() {
     try {
@@ -83,6 +86,40 @@ export default function Vault() {
 
   useEffect(() => {
     refresh();
+  }, []);
+
+  // Whole-window drag detection, not just the toolbar — dropping a file
+  // anywhere over the page shows the full-area "Drop to upload" overlay,
+  // matching Drive/Dropbox/OneDrive rather than requiring a small target.
+  useEffect(() => {
+    function handleWindowDragEnter(event: DragEvent) {
+      if (!event.dataTransfer?.types.includes("Files")) return;
+      dragCounter.current += 1;
+      setDragActive(true);
+    }
+    function handleWindowDragLeave() {
+      dragCounter.current = Math.max(0, dragCounter.current - 1);
+      if (dragCounter.current === 0) setDragActive(false);
+    }
+    function handleWindowDragOver(event: DragEvent) {
+      event.preventDefault();
+    }
+    function handleWindowDrop(event: DragEvent) {
+      event.preventDefault();
+      dragCounter.current = 0;
+      setDragActive(false);
+    }
+
+    window.addEventListener("dragenter", handleWindowDragEnter);
+    window.addEventListener("dragleave", handleWindowDragLeave);
+    window.addEventListener("dragover", handleWindowDragOver);
+    window.addEventListener("drop", handleWindowDrop);
+    return () => {
+      window.removeEventListener("dragenter", handleWindowDragEnter);
+      window.removeEventListener("dragleave", handleWindowDragLeave);
+      window.removeEventListener("dragover", handleWindowDragOver);
+      window.removeEventListener("drop", handleWindowDrop);
+    };
   }, []);
 
   async function uploadFiles(fileEntries: FileWithPath[]) {
@@ -144,7 +181,7 @@ export default function Vault() {
       setError(err instanceof Error ? err.message : "Upload failed.");
     } finally {
       setUploading(false);
-      setUploadProgress(null);
+      setTimeout(() => setUploadProgress(null), 1200);
     }
   }
 
@@ -223,13 +260,14 @@ export default function Vault() {
       return;
     }
     setError(null);
-    setNotice(`Staged ${entries.length} file${entries.length === 1 ? "" : "s"}. Review and confirm encryption.`);
+    setNotice(null);
     setPendingUpload(entries);
   }
 
   async function handleDrop(event: React.DragEvent<HTMLDivElement>) {
     event.preventDefault();
     event.stopPropagation();
+    dragCounter.current = 0;
     setDragActive(false);
 
     const entries = await filesFromDrop(event);
@@ -239,7 +277,7 @@ export default function Vault() {
     }
 
     setError(null);
-    setNotice(`Staged ${entries.length} file${entries.length === 1 ? "" : "s"} from drag and drop.`);
+    setNotice(null);
     setPendingUpload(entries);
   }
 
@@ -306,61 +344,28 @@ export default function Vault() {
   }
 
   return (
-    <div>
-      <PageHeader icon="🔐" title="Vault" subtitle="Files stay encrypted on this drive. Nothing touches the host disk." />
+    <div className="relative">
+      <PageHeader icon="🔐" title="My Vault" subtitle="Files stay encrypted on this drive. Nothing touches the host disk." />
 
-      <div
-        className={`neo-panel mb-6 flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between ${dragActive ? "ring-4 ring-neo-yellow" : ""}`}
-        onDragEnter={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          setDragActive(true);
-        }}
-        onDragOver={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          if (!dragActive) setDragActive(true);
-        }}
-        onDragLeave={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          setDragActive(false);
-        }}
-        onDrop={handleDrop}
-      >
-        <div>
-          <p className="font-semibold text-slate-700">
-            {loading ? "Loading..." : `${files.length} item${files.length === 1 ? "" : "s"}`}
-          </p>
-          <p className="text-sm text-slate-600">Upload files or folders, drag and drop them here, and create nested folders directly inside the vault.</p>
-          <DropHint active={dragActive} />
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <NewMenu
+          disabled={uploading || pendingUpload.length > 0}
+          onUploadFiles={() => inputRef.current?.click()}
+          onUploadFolder={() => folderInputRef.current?.click()}
+          onCreateFolder={() => setCreateOpen(true)}
+        />
+
+        <div className="relative w-full sm:w-72">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">🔎</span>
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search in vault…"
+            className="neo-input w-full py-2 pl-9 pr-4 text-sm"
+          />
         </div>
-        <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={() => inputRef.current?.click()}
-            disabled={uploading || pendingUpload.length > 0}
-            className="neo-btn rounded-sm bg-neo-green px-5 py-3 text-white"
-          >
-            {uploading ? "Encrypting…" : "⬆️ Upload Files"}
-          </button>
-          <button
-            type="button"
-            onClick={() => folderInputRef.current?.click()}
-            disabled={uploading || pendingUpload.length > 0}
-            className="neo-btn rounded-sm bg-neo-cyan px-5 py-3 text-ink"
-          >
-            {uploading ? "Encrypting…" : "📁 Upload Folder"}
-          </button>
-          <button
-            type="button"
-            disabled={uploading || pendingUpload.length > 0}
-            onClick={() => setCreateOpen(true)}
-            className="neo-btn rounded-sm bg-neo-blue px-5 py-3 text-white"
-          >
-            Create Folder
-          </button>
-        </div>
+
         <input
           ref={inputRef}
           type="file"
@@ -385,29 +390,51 @@ export default function Vault() {
       </div>
 
       {error && (
-        <p className="neo-card mb-6 bg-neo-red px-4 py-3 text-sm font-semibold text-white">{error}</p>
+        <p className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</p>
       )}
       {notice && (
-        <p className="neo-card mb-6 bg-neo-yellow px-4 py-3 font-bold">{notice}</p>
+        <p className="mb-5 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-700">{notice}</p>
       )}
 
-      {pendingUpload.length > 0 && (
+      <p className="mb-3 text-sm font-medium text-slate-500">
+        {loading ? "Loading…" : `${files.length} item${files.length === 1 ? "" : "s"} in your vault`}
+      </p>
+
+      {files.length === 0 && !loading ? (
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
+          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-3xl">📥</div>
+          <p className="font-semibold text-ink">Your vault is empty</p>
+          <p className="mt-1 text-sm text-slate-500">Drag files or folders anywhere on this page, or use the "+ New" button above.</p>
+        </div>
+      ) : (
+        <VaultTreeView entries={files} searchQuery={searchQuery} onView={handleView} onDelete={requestDelete} />
+      )}
+
+      {/* Full-page overlay while dragging a file over the window, not just a small drop target */}
+      {dragActive && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-blue-600/10 backdrop-blur-[1px]"
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={handleDrop}
+        >
+          <div className="rounded-3xl border-4 border-dashed border-blue-400 bg-white/95 px-16 py-14 text-center shadow-xl">
+            <div className="text-5xl">📤</div>
+            <p className="mt-4 text-xl font-semibold text-ink">Drop files to upload</p>
+            <p className="mt-1 text-sm text-slate-500">Files and folders will be staged for encryption.</p>
+          </div>
+        </div>
+      )}
+
+      {pendingUpload.length > 0 && !uploading && (
         <UploadPreviewPanel
           paths={pendingUpload.map((item) => item.relativePath)}
           uploading={uploading}
-          progress={uploadProgress}
           onCancel={cancelPendingUpload}
           onConfirm={confirmPendingUpload}
         />
       )}
 
-      <div className="">
-        {files.length === 0 && !loading ? (
-          <div className="neo-panel p-8 text-center font-semibold text-slate-600">Vault is empty. Upload files or folders to start.</div>
-        ) : (
-          <VaultTreeView entries={files} onView={handleView} onDelete={requestDelete} />
-        )}
-      </div>
+      <UploadToast progress={uploadProgress} />
 
       {preview && (
         <VaultFilePreview

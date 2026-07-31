@@ -125,28 +125,30 @@ export default function Settings({ onLock }: SettingsProps) {
                 key={option}
                 type="button"
                 onClick={() => setAutoLock(option)}
-                className={`neo-btn py-3 ${autoLock === option ? "bg-neo-yellow" : "bg-paper"}`}
+                className={`neo-btn py-3 ${autoLock === option ? "bg-blue-600 text-white" : "bg-paper"}`}
               >
                 {option}
               </button>
             ))}
           </div>
 
-          <div className="mt-8 border-t-4 border-ink pt-6">
+          <div className="mt-8 border-t border-slate-200 pt-6">
             <h3 className="mb-3 text-xl font-semibold text-ink">Danger Zone</h3>
             <button type="button" onClick={onLock} className="neo-btn w-full bg-neo-red py-3 text-white">
               🔒 Lock Vault Now
             </button>
           </div>
-          <div className="mt-6 border-t-2 pt-4">
+          <div className="mt-6 border-t border-slate-200 pt-4">
             <h3 className="mb-3 text-xl font-semibold text-ink">Updates</h3>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4">
               <div>
                 <div className="font-semibold text-ink">Auto-check for updates</div>
                 <div className="text-sm text-slate-600">When enabled, Lockbox checks GitHub releases and applies portable Windows EXE updates automatically.</div>
               </div>
               <button
                 type="button"
+                role="switch"
+                aria-checked={autoUpdate}
                 onClick={() => {
                   const next = !autoUpdate;
                   setAutoUpdate(next);
@@ -154,9 +156,11 @@ export default function Settings({ onLock }: SettingsProps) {
                     localStorage.setItem("autoUpdateEnabled", next ? "true" : "false");
                   } catch {}
                 }}
-                className={`neo-btn py-2 px-4 ${autoUpdate ? "bg-neo-yellow" : "bg-paper"}`}
+                className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${autoUpdate ? "bg-blue-600" : "bg-slate-200"}`}
               >
-                {autoUpdate ? "On" : "Off"}
+                <span
+                  className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${autoUpdate ? "translate-x-6" : "translate-x-1"}`}
+                />
               </button>
             </div>
             <button
@@ -173,7 +177,7 @@ export default function Settings({ onLock }: SettingsProps) {
             </p>
           </div>
 
-          <div className="mt-6 border-t-2 pt-4">
+          <div className="mt-6 border-t border-slate-200 pt-4">
             <h3 className="mb-3 text-xl font-semibold text-ink">Privacy Mode Transparency</h3>
             <div className="neo-card bg-paper p-4 text-sm text-slate-700">
               <p className="font-bold">Portable from USB (recommended):</p>

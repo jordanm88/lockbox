@@ -26,6 +26,16 @@ export function createFolder(relativePath: string): Promise<void> {
   return invoke<void>("create_folder", { relativePath });
 }
 
+export interface StorageInfo {
+  vaultUsedBytes: number;
+  driveTotalBytes: number | null;
+  driveFreeBytes: number | null;
+}
+
+export function getStorageInfo(): Promise<StorageInfo> {
+  return invoke<StorageInfo>("get_storage_info");
+}
+
 // Large files cross the IPC boundary in chunks rather than one giant
 // Vec<u8> argument/return value. A single multi-hundred-MB file sent as one
 // shot means building one huge JS array and JSON-(de)serializing it in a

@@ -69,6 +69,48 @@ pub fn vault_exists(state: State<AppState>) -> Result<bool, String> {
     Ok(meta_path.exists())
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageInfo {
+    vault_used_bytes: u64,
+    drive_total_bytes: Option<u64>,
+    drive_free_bytes: Option<u64>,
+}
+
+/// Powers the Dropbox/Drive-style storage meter in the sidebar. Vault usage
+/// is an exact sum of what's on disk under Vault/ (encrypted blobs are
+/// within ~28 bytes/file of their plaintext size, close enough to display).
+/// Drive totals come from the filesystem the USB root lives on, so the meter
+/// reflects the actual drive's capacity, not some fixed/fake quota.
+#[tauri::command]
+pub fn get_storage_info(state: State<AppState>) -> Result<StorageInfo, String> {
+    let vault_dir = usb_root::vault_dir(&state.root);
+    let vault_used_bytes = dir_size(&vault_dir).unwrap_or(0);
+
+    let drive_total_bytes = fs4::total_space(&state.root).ok();
+    let drive_free_bytes = fs4::available_space(&state.root).ok();
+
+    Ok(StorageInfo {
+        vault_used_bytes,
+        drive_total_bytes,
+        drive_free_bytes,
+    })
+}
+
+fn dir_size(path: &Path) -> std::io::Result<u64> {
+    let mut total = 0u64;
+    for entry in fs::read_dir(path)? {
+        let entry = entry?;
+        let metadata = entry.metadata()?;
+        if metadata.is_dir() {
+            total += dir_size(&entry.path())?;
+        } else {
+            total += metadata.len();
+        }
+    }
+    Ok(total)
+}
+
 /// Shared by the chunked upload path below. Takes fully-assembled plaintext
 /// bytes and does the actual encrypt + index update.
 fn save_encrypted_file(

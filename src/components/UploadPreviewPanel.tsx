@@ -1,13 +1,6 @@
 interface UploadPreviewPanelProps {
   paths: string[];
   uploading: boolean;
-  progress: {
-    completedFiles: number;
-    totalFiles: number;
-    completedBytes: number;
-    totalBytes: number;
-    currentFile: string | null;
-  } | null;
   onCancel: () => void;
   onConfirm: () => void;
 }
@@ -24,71 +17,48 @@ function renderLines(paths: string[]): string[] {
     });
 }
 
-export default function UploadPreviewPanel({
-  paths,
-  uploading,
-  progress,
-  onCancel,
-  onConfirm,
-}: UploadPreviewPanelProps) {
+// A review step before anything gets encrypted — deliberately kept as a
+// small modal rather than the old full-width inline panel, since actual
+// progress now lives in the floating UploadToast instead.
+export default function UploadPreviewPanel({ paths, uploading, onCancel, onConfirm }: UploadPreviewPanelProps) {
   const lines = renderLines(paths);
   const MAX_LINES = 80;
   const shownLines = lines.slice(0, MAX_LINES);
   const hiddenCount = Math.max(0, lines.length - shownLines.length);
 
   return (
-    <div className="neo-panel mb-6 bg-paper p-5">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="font-semibold text-ink">Upload Preview</p>
-          <p className="text-sm font-medium text-slate-600">
-            {paths.length} file{paths.length === 1 ? "" : "s"} staged for encryption
-          </p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4 backdrop-blur-[1px]">
+      <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+        <p className="text-lg font-semibold text-ink">Upload preview</p>
+        <p className="mt-1 text-sm text-slate-500">
+          {paths.length} file{paths.length === 1 ? "" : "s"} staged for encryption.
+        </p>
+
+        <div className="mt-4 max-h-72 overflow-auto rounded-xl border border-slate-100 bg-slate-50 p-3 font-mono text-xs text-slate-600">
+          {shownLines.map((line, index) => (
+            <div key={`${line}-${index}`}>{line}</div>
+          ))}
+          {hiddenCount > 0 && <div className="mt-2 font-semibold text-slate-500">...and {hiddenCount} more</div>}
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={onCancel} disabled={uploading} className="neo-btn px-4 py-2">
+
+        <div className="mt-5 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={uploading}
+            className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          >
             Cancel
           </button>
           <button
             type="button"
             onClick={onConfirm}
             disabled={uploading}
-            className="neo-btn bg-neo-green px-4 py-2 text-white"
+            className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            {uploading ? "Encrypting…" : "Encrypt and Save"}
+            {uploading ? "Encrypting…" : "Encrypt and save"}
           </button>
         </div>
-      </div>
-
-      {uploading && progress && (
-        <div className="mb-4 space-y-2">
-          <div className="neo-border h-3 w-full overflow-hidden bg-slate-100">
-            <div
-              className="h-full bg-neo-blue transition-all duration-200"
-              style={{ width: `${Math.min(100, Math.round((progress.completedBytes / Math.max(1, progress.totalBytes)) * 100))}%` }}
-            />
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600">
-            <span>
-              {progress.completedFiles}/{progress.totalFiles} files
-            </span>
-            <span>
-              {Math.min(100, Math.round((progress.completedBytes / Math.max(1, progress.totalBytes)) * 100))}% complete
-            </span>
-          </div>
-          {progress.currentFile && (
-            <p className="truncate text-sm font-medium text-slate-700">Working on: {progress.currentFile}</p>
-          )}
-        </div>
-      )}
-
-      <div className="neo-border max-h-72 overflow-auto bg-white p-3 font-mono text-xs text-ink/80">
-        {shownLines.map((line, index) => (
-          <div key={`${line}-${index}`}>{line}</div>
-        ))}
-        {hiddenCount > 0 && (
-          <div className="mt-2 font-semibold text-slate-600">...and {hiddenCount} more</div>
-        )}
       </div>
     </div>
   );

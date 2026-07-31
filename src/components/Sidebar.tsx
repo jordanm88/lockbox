@@ -1,4 +1,5 @@
 import { NAV_ITEMS, TabId } from "../types";
+import StorageMeter from "./StorageMeter";
 
 interface SidebarProps {
   activeTab: TabId;
@@ -8,18 +9,15 @@ interface SidebarProps {
 
 export default function Sidebar({ activeTab, onSelectTab, onLock }: SidebarProps) {
   return (
-    <aside className="flex min-h-screen w-72 shrink-0 flex-col border-r border-slate-200 bg-slate-900 text-white shadow-brutal">
-      <div className="border-b border-slate-700 px-6 py-8">
-        <div className="text-4xl">🔒</div>
-        <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-white">
-          Lockbox
-        </h1>
-        <p className="mt-2 max-w-[14rem] text-sm font-medium text-white/70">
-          Secure portable vault access for your drive.
-        </p>
+    <aside className="flex min-h-screen w-64 shrink-0 flex-col border-r border-slate-200 bg-white">
+      <div className="flex items-center gap-2.5 px-5 py-5">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-lg text-white shadow-sm">
+          🔒
+        </div>
+        <span className="text-lg font-bold tracking-tight text-ink">Lockbox</span>
       </div>
 
-      <nav className="flex flex-1 flex-col gap-2 px-4 py-4">
+      <nav className="flex flex-1 flex-col gap-0.5 px-3">
         {NAV_ITEMS.map((item) => {
           const isActive = item.id === activeTab;
           return (
@@ -27,23 +25,28 @@ export default function Sidebar({ activeTab, onSelectTab, onLock }: SidebarProps
               key={item.id}
               type="button"
               onClick={() => onSelectTab(item.id)}
-              className={`flex items-center gap-3 rounded-xl border border-transparent px-4 py-3 text-left font-semibold transition-all duration-150 ${
-                isActive
-                  ? "border-slate-200 bg-white text-ink shadow-brutal-sm"
-                  : "text-white/85 hover:bg-white/10"
+              className={`flex items-center gap-3 rounded-full px-4 py-2.5 text-left text-sm font-medium transition-colors ${
+                isActive ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-100"
               }`}
             >
-              <span className="text-xl">{item.icon}</span>
+              <span className="text-lg">{item.icon}</span>
               <span>{item.label}</span>
             </button>
           );
         })}
       </nav>
 
-      <div className="border-t border-slate-700 p-5">
-        <button type="button" onClick={onLock} className="neo-btn w-full bg-neo-red py-3 text-white">
-          🔒 Lock Vault
-        </button>
+      <div className="border-t border-slate-200">
+        <StorageMeter />
+        <div className="px-4 pb-4 pt-1">
+          <button
+            type="button"
+            onClick={onLock}
+            className="flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+          >
+            🔒 Lock Vault
+          </button>
+        </div>
       </div>
     </aside>
   );

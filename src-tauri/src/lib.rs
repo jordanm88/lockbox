@@ -35,6 +35,7 @@ pub fn run() {
             commands::unlock_vault,
             commands::lock_vault,
             commands::vault_exists,
+            commands::get_storage_info,
             commands::create_folder,
             commands::begin_upload,
             commands::append_upload_chunk,

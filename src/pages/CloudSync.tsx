@@ -69,13 +69,13 @@ function Field({
 
 function StatusBadge({ status }: { status: SyncStatus }) {
   const variants: Record<SyncStatus, { label: string; className: string }> = {
-    idle: { label: "Never synced", className: "bg-paper" },
-    running: { label: "Syncing…", className: "bg-neo-yellow" },
-    success: { label: "✓ Synced", className: "bg-neo-green" },
-    failed: { label: "✗ Failed", className: "bg-neo-red text-white" },
+    idle: { label: "Never synced", className: "bg-slate-100 text-slate-600" },
+    running: { label: "Syncing…", className: "bg-amber-100 text-amber-700" },
+    success: { label: "✓ Synced", className: "bg-emerald-100 text-emerald-700" },
+    failed: { label: "✗ Failed", className: "bg-red-100 text-red-700" },
   };
   const { label, className } = variants[status];
-  return <span className={`neo-border px-3 py-1 text-sm font-semibold ${className}`}>{label}</span>;
+  return <span className={`rounded-full px-3 py-1 text-sm font-semibold ${className}`}>{label}</span>;
 }
 
 export default function CloudSync() {
@@ -283,14 +283,14 @@ export default function CloudSync() {
                 </>
               )}
 
-              <button type="button" onClick={handleSave} disabled={saving} className="neo-btn mt-2 bg-neo-green py-3 text-white">
+              <button type="button" onClick={handleSave} disabled={saving} className="neo-btn mt-2 bg-blue-600 py-3 text-white hover:bg-blue-700">
                 {saving ? "Saving…" : saved ? "✓ Saved" : "💾 Save Connection"}
               </button>
               <button
                 type="button"
                 onClick={handleTestConnection}
                 disabled={busy}
-                className="neo-btn bg-neo-yellow py-3"
+                className="neo-btn bg-white py-3 text-slate-700"
               >
                 {testing ? "Testing…" : "🧪 Test Connection"}
               </button>

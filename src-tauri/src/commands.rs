@@ -261,7 +261,11 @@ fn ensure_parent_directories(index: &mut VaultIndex, path: &str) {
     }
 }
 
-fn data_dir(vault_dir: &Path) -> PathBuf {
+// pub(crate) so rclone.rs's pre-sync "is the vault actually empty" check can
+// share this exact path instead of re-deriving it — that drift (a stale
+// copy checking the wrong location after the storage layout changed) is
+// exactly what caused sync to report real data as "empty" and skip.
+pub(crate) fn data_dir(vault_dir: &Path) -> PathBuf {
     vault_dir.join(DATA_RELATIVE_PATH)
 }
 

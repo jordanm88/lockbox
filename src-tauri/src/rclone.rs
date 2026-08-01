@@ -219,15 +219,29 @@ pub async fn run_rclone_test(
     }
 }
 
-/// True if `vault_dir` has at least one non-hidden entry. Used as a
-/// pre-flight check before `rclone sync`, since syncing an empty directory
-/// would delete everything already on the remote.
+/// True if the vault has at least one real file blob. Used as a pre-flight
+/// check before `rclone sync`, since syncing an empty directory would
+/// delete everything already on the remote.
+///
+/// Actual file content lives under Vault/.lockbox/data/ (an index + blob
+/// store, not files kept under their own names at the top of Vault/) — this
+/// previously checked the top level of Vault/ directly, which only ever
+/// contains the hidden .lockbox/ folder itself and so always reported
+/// "empty" regardless of how much data was actually in the vault, silently
+/// skipping every sync. Sharing `commands::data_dir` here (rather than
+/// re-deriving the path) is what stops this drifting out of sync again if
+/// the storage layout ever moves.
 fn vault_has_content(vault_dir: &Path) -> Result<bool, String> {
-    let entries =
-        std::fs::read_dir(vault_dir).map_err(|e| format!("failed to read vault: {e}"))?;
+    let data_dir = crate::commands::data_dir(vault_dir);
+    let entries = match std::fs::read_dir(&data_dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(e) => return Err(format!("failed to read vault: {e}")),
+    };
+
     for entry in entries {
         let entry = entry.map_err(|e| format!("failed to read vault entry: {e}"))?;
-        if !entry.file_name().to_string_lossy().starts_with('.') {
+        if entry.metadata().map(|m| m.is_file()).unwrap_or(false) {
             return Ok(true);
         }
     }

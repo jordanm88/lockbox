@@ -22,6 +22,25 @@ pub fn rclone_binary_path(root: &Path) -> PathBuf {
     usb_root::tools_dir(root).join("rclone.exe")
 }
 
+/// The directory actually worth backing up. `Vault/` itself contains
+/// nothing but the hidden `.lockbox/` folder — the encrypted index, meta,
+/// and blob store all live one level deeper, inside it. Syncing `Vault/`
+/// directly (as this used to) meant the configured remote path ended up
+/// with everything nested under an extra `.lockbox/` folder — a name that's
+/// only meaningful as this app's own internal implementation detail, not
+/// something that should show up as a wrapper on the remote. Syncing this
+/// instead makes the remote path's own root the backup's root.
+fn backup_source_dir(vault_dir: &Path) -> PathBuf {
+    vault_dir.join(".lockbox")
+}
+
+/// `instance.lock` is a machine-local runtime artifact (an OS-level advisory
+/// lock file, held open for as long as this process has the vault open) —
+/// it has no backup value, and copying it down during a restore could
+/// outright fail if this same vault is currently open elsewhere and holding
+/// it locked. Excluded from both directions of transfer.
+const RCLONE_EXCLUDE_ARGS: [&str; 2] = ["--exclude", "instance.lock"];
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RcloneOutputLine {
@@ -57,10 +76,10 @@ struct RestoreFinished {
     code: Option<i32>,
 }
 
-/// Runs `rclone sync <Vault dir> <remote>:<path>` for the given config,
-/// streaming stdout/stderr back to the frontend as `rclone-output` events
-/// line-by-line as they arrive, and emitting `rclone-sync-finished` once the
-/// process exits.
+/// Runs `rclone sync <Vault dir>/.lockbox <remote>:<path>` for the given
+/// config, streaming stdout/stderr back to the frontend as `rclone-output`
+/// events line-by-line as they arrive, and emitting `rclone-sync-finished`
+/// once the process exits.
 pub async fn run_rclone_sync(
     app_handle: AppHandle,
     root: PathBuf,
@@ -69,6 +88,7 @@ pub async fn run_rclone_sync(
     let rclone_path = resolve_rclone_binary(&root)?;
 
     let vault_dir = usb_root::vault_dir(&root);
+    let source_dir = backup_source_dir(&vault_dir);
     // Building the RCLONE_CONFIG_* env vars can shell out to `rclone obscure`
     // for password fields, which is a blocking subprocess call — keep it off
     // the async executor thread.
@@ -123,8 +143,9 @@ pub async fn run_rclone_sync(
     let mut command = tokio::process::Command::new(&rclone_path);
     command
         .arg("sync")
-        .arg(&vault_dir)
+        .arg(&source_dir)
         .arg(&target)
+        .args(RCLONE_EXCLUDE_ARGS)
         .arg("--progress")
         .arg("--config")
         .arg(null_config_path)
@@ -174,13 +195,13 @@ pub async fn run_rclone_sync(
     }
 }
 
-/// Runs `rclone copy <remote>:<path> <Vault dir>` — the reverse direction of
-/// `run_rclone_sync` — to restore a vault from its cloud backup. Deliberately
-/// `copy`, not `sync`: `sync` would delete anything in the vault that isn't
-/// also on the remote, which is exactly the kind of surprise data loss a
-/// "restore my backup" action must never cause. `copy` only ever adds or
-/// overwrites files that exist on the remote, leaving anything local-only
-/// untouched.
+/// Runs `rclone copy <remote>:<path> <Vault dir>/.lockbox` — the reverse
+/// direction of `run_rclone_sync` — to restore a vault from its cloud
+/// backup. Deliberately `copy`, not `sync`: `sync` would delete anything in
+/// the vault that isn't also on the remote, which is exactly the kind of
+/// surprise data loss a "restore my backup" action must never cause. `copy`
+/// only ever adds or overwrites files that exist on the remote, leaving
+/// anything local-only untouched.
 pub async fn run_rclone_restore(
     app_handle: AppHandle,
     root: PathBuf,
@@ -189,6 +210,7 @@ pub async fn run_rclone_restore(
     let rclone_path = resolve_rclone_binary(&root)?;
 
     let vault_dir = usb_root::vault_dir(&root);
+    let source_dir = backup_source_dir(&vault_dir);
     let env_vars = {
         let rclone_path = rclone_path.clone();
         let config = config.clone();
@@ -204,7 +226,8 @@ pub async fn run_rclone_restore(
     command
         .arg("copy")
         .arg(&target)
-        .arg(&vault_dir)
+        .arg(&source_dir)
+        .args(RCLONE_EXCLUDE_ARGS)
         .arg("--progress")
         .arg("--config")
         .arg(null_config_path)

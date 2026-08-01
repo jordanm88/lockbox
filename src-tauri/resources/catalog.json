@@ -23,6 +23,7 @@
       "icon": "🧩",
       "homepage": "https://code.visualstudio.com/",
       "category": "Development",
+      "active": false,
       "targets": {
         "windows": {
           "url": "https://update.code.visualstudio.com/latest/win32-x64-archive/stable",
@@ -83,6 +84,7 @@
       "icon": "🎬",
       "homepage": "https://www.videolan.org/vlc/",
       "category": "Multimedia",
+      "active": false,
       "targets": {
         "windows": {
           "url": "https://download.videolan.org/pub/videolan/vlc/last/win64/vlc-3.0.23-win64.zip",
@@ -257,6 +259,7 @@
       "icon": "🗜️",
       "homepage": "https://peazip.github.io/",
       "category": "Utilities",
+      "active": false,
       "targets": {
         "windows": {
           "url": "https://github.com/peazip/PeaZip/releases/download/11.2.0/peazip_portable-11.2.0.WIN64.zip",
@@ -273,6 +276,7 @@
       "icon": "🔬",
       "homepage": "https://www.cpuid.com/softwares/cpu-z.html",
       "category": "Utilities",
+      "active": false,
       "targets": {
         "windows": {
           "url": "https://download.cpuid.com/cpu-z/cpu-z_2.20.2-en.zip",
@@ -289,6 +293,7 @@
       "icon": "💾",
       "homepage": "https://rufus.ie/",
       "category": "Utilities",
+      "active": false,
       "targets": {
         "windows": {
           "url": "https://github.com/pbatard/rufus/releases/download/v4.15/rufus-4.15.exe",

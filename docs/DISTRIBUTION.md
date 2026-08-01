@@ -30,11 +30,29 @@ portable executable into `build\Lockbox-Windows.exe`.
 > If the build still fails, also install the Visual Studio/MSVC C++ build
 > tools required by the `x86_64-pc-windows-msvc` target.
 
-This produces `src-tauri/target/release/Lockbox.exe` — the raw portable exe,
-not the NSIS/MSI installer. Tauri's bundle config also produces
-installer-style artifacts (`.msi`, NSIS `.exe`) alongside it — ignore them
-for USB use, they install onto the host rather than running portably. The
-packaging script below only picks out the portable exe.
+This produces `src-tauri/target/release/Lockbox.exe` — the raw portable exe
+— alongside installer-style artifacts from Tauri's bundle config (`.msi`,
+NSIS `.exe`) under `src-tauri/target/release/bundle/`. For USB use, ignore
+the installers and use the portable exe: the packaging script below only
+picks out the portable exe, since installers write onto the host rather than
+running portably.
+
+Every GitHub release (see "Automatic releases" below) attaches all three —
+the portable exe, the MSI, and the NSIS installer — so someone who wants a
+normal on-host install has that option too. The in-app self-updater
+(`updates.rs`) only ever picks the portable exe from a release, explicitly
+skipping anything with "setup" or "installer" in its filename, since it can
+only swap a running exe in place, not run an installer.
+
+## Automatic releases
+
+Every push to `main` where `package.json`'s version doesn't already have a
+matching `v<version>` tag gets tagged and published as a GitHub release by
+CI automatically — see the `auto_tag_and_release` job in
+`.github/workflows/build.yml`. Bumping the version with
+`npm run version:update -- x.y.z` and pushing to `main` is the entire
+release process; no manual tagging step needed. Pushing a commit that
+doesn't change the version just builds and stops there.
 
 ### Minimizing host footprint when using an installer (MSI/NSIS)
 

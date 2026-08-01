@@ -90,7 +90,12 @@ Cloud Sync uses `rclone` to back up the vault to an external cloud destination.
 
 ## Build
 
-CI builds on pushes to `main` and on `v*` tags. To build locally:
+CI builds on every push to `main` and on `v*` tags. If a push to `main`
+carries a `package.json` version that doesn't have a matching tag yet, CI
+creates that tag and publishes a real GitHub release automatically — bumping
+the version with `npm run version:update -- x.y.z` and pushing to `main` is
+the entire release process; no manual tagging step. Pushes that don't change
+the version just build and stop there. To build locally:
 
 ```bash
 npm ci

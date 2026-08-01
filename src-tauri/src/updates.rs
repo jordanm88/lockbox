@@ -158,6 +158,15 @@ fn find_windows_portable_asset(release: &Value) -> (Option<String>, Option<Strin
             continue;
         }
 
+        // The release also carries an NSIS installer .exe alongside the raw
+        // portable one (see docs/DISTRIBUTION.md) — this updater only knows
+        // how to swap a running exe in place, not run an installer, so an
+        // installer-named asset must never be picked here even if it would
+        // otherwise score high enough to win.
+        if lower.contains("setup") || lower.contains("installer") {
+            continue;
+        }
+
         let score = if lower.contains("lockbox-windows") {
             100
         } else if lower == "lockbox.exe" {

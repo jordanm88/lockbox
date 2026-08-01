@@ -66,10 +66,10 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  # Only runs when a v* tag is pushed — ordinary pushes/PRs just build and
-  # stop at the artifacts above. Attaches every platform's raw build output
-  # to a draft release; run scripts/package-usb.* locally afterward to turn
-  # a downloaded artifact into an actual USB layout (see docs/DISTRIBUTION.md).
+  # Only runs when a v* tag is pushed manually — ordinary pushes/PRs just
+  # build and stop at the artifacts above. This is a fallback path for
+  # cutting a release from a tag by hand; the normal path is
+  # auto_tag_and_release below, which fires on every push to main instead.
   release:
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
@@ -80,12 +80,14 @@ jobs:
         with:
           path: artifacts
 
-      # Only the raw portable exe, not the whole artifact tree — `bundle/`
-      # also contains the MSI/NSIS installers, which aren't what the
-      # in-app updater downloads and were never the intended distribution
-      # artifact for a portable app (see docs/DISTRIBUTION.md). Matching
-      # both casings since the exact binary name has moved between
-      # `lockbox.exe` and `Lockbox.exe` across earlier changes.
+      # Attaches the portable exe plus the MSI and NSIS installer from
+      # `bundle/`, so a release covers all three distribution forms. The
+      # in-app self-updater (updates.rs) only ever picks the portable exe —
+      # it explicitly skips anything with "setup"/"installer" in the name —
+      # so adding the installers here doesn't affect it (see
+      # docs/DISTRIBUTION.md). Matching both casings since the exact binary
+      # name has moved between `lockbox.exe` and `Lockbox.exe` across
+      # earlier changes.
       - name: Create draft GitHub release
         uses: softprops/action-gh-release@v2
         with:
@@ -95,6 +97,68 @@ jobs:
           files: |
             artifacts/**/Lockbox.exe
             artifacts/**/lockbox.exe
+            artifacts/**/bundle/msi/*.msi
+            artifacts/**/bundle/nsis/*.exe
+
+  # The normal release path: every push to main checks whether
+  # package.json's version has moved past the last tag, and if so, creates
+  # that tag and publishes the release itself — no manual `git tag` step.
+  # Pushing a fresh commit that doesn't bump the version just builds and
+  # stops here (the "tag already exists" check skips the rest), so this
+  # only fires on an actual version bump landing on main.
+  auto_tag_and_release:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine version and check for an existing tag
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(grep -m1 '"version"' package.json | sed -E 's/.*"version":[[:space:]]*"([^"]+)".*/\1/')
+          if [ -z "$VERSION" ]; then
+            echo "Could not read version from package.json" >&2
+            exit 1
+          fi
+          TAG="v${VERSION}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download all build artifacts
+        if: steps.version.outputs.exists == 'false'
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create and push tag
+        if: steps.version.outputs.exists == 'false'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+
+      - name: Create GitHub release
+        if: steps.version.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ steps.version.outputs.tag }}
+          draft: false
+          fail_on_unmatched_files: true
+          files: |
+            artifacts/**/Lockbox.exe
+            artifacts/**/lockbox.exe
+            artifacts/**/bundle/msi/*.msi
+            artifacts/**/bundle/nsis/*.exe
 
   publish_optional:
     needs: build
@@ -115,3 +179,5 @@ jobs:
           files: |
             artifacts/**/Lockbox.exe
             artifacts/**/lockbox.exe
+            artifacts/**/bundle/msi/*.msi
+            artifacts/**/bundle/nsis/*.exe

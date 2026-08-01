@@ -95,6 +95,14 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           draft: false
           fail_on_unmatched_files: true
+          # Without this, the release body is left empty — GitHub's web UI
+          # cosmetically falls back to showing the tagged commit's message
+          # in that spot, but that's UI-only and never actually populates
+          # the release's real `body` field, which is exactly what the
+          # in-app "what's new" popup (updates.rs's get_current_release_notes)
+          # reads. This asks GitHub to auto-summarize commits since the
+          # previous release instead of leaving it genuinely empty.
+          generate_release_notes: true
           files: |
             artifacts/**/Lockbox.exe
             artifacts/**/bundle/msi/*.msi
@@ -154,6 +162,7 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           draft: false
           fail_on_unmatched_files: true
+          generate_release_notes: true
           files: |
             artifacts/**/Lockbox.exe
             artifacts/**/bundle/msi/*.msi
@@ -175,6 +184,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           draft: false
           fail_on_unmatched_files: true
+          generate_release_notes: true
           files: |
             artifacts/**/Lockbox.exe
             artifacts/**/bundle/msi/*.msi

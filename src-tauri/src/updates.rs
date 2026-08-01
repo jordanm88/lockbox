@@ -2,7 +2,6 @@ use serde::Serialize;
 use serde_json::Value;
 use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
 use tauri::AppHandle;
 use tauri::Manager;
 

@@ -6,6 +6,8 @@ use std::env;
 use std::fs::File;
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
+use std::sync::mpsc;
+use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 
@@ -19,10 +21,14 @@ pub(crate) const LAUNCHER_RECORD_FILE: &str = ".lockbox-launcher";
 // (a ~10MB CLI tool vs. VS Code's ~335MB Electron archive), so any single
 // fixed duration is either too short for a legitimate large download on an
 // ordinary connection, or too long to catch a genuinely dead one quickly.
-// `read_timeout` below solves this properly — it resets on every chunk of
-// data received, so it only fires on an actual stall (no bytes arriving at
-// all for this long), not on a slow-but-still-progressing transfer. A
-// connection that can't even be established still needs its own bound.
+// reqwest's blocking client has no built-in per-read/stall timeout (only a
+// connect timeout and a total-request timeout), so `download_with_progress`
+// below builds its own: the actual socket reads happen on a background
+// thread that streams chunks back over a channel, and the main thread calls
+// `recv_timeout` on that channel — a timeout that resets after every chunk,
+// so it only fires on an actual stall (no bytes arriving at all for this
+// long), never on a slow-but-still-progressing transfer. A connection that
+// can't even be established still needs its own bound.
 const CONNECT_TIMEOUT_SECS: u64 = 20;
 const STALL_TIMEOUT_SECS: u64 = 30;
 #[cfg(windows)]
@@ -152,7 +158,6 @@ fn download_with_progress(
 ) -> Result<Vec<u8>, String> {
     let client = reqwest::blocking::Client::builder()
         .connect_timeout(Duration::from_secs(CONNECT_TIMEOUT_SECS))
-        .read_timeout(Duration::from_secs(STALL_TIMEOUT_SECS))
         .build()
         .map_err(|e| format!("failed to build download client: {e}"))?;
 
@@ -171,20 +176,50 @@ fn download_with_progress(
         ));
     }
 
+    // The blocking read happens on its own thread so the main thread can
+    // bound each chunk's wait with `recv_timeout` instead of blocking
+    // forever on a stalled socket (reqwest's blocking client has no
+    // per-read timeout knob). If we give up below, this thread is left to
+    // finish or fail on its own dead socket — a rare, harmless leak on an
+    // already-erroring path rather than something worth cancelling.
+    let (tx, rx) = mpsc::channel::<Result<Vec<u8>, String>>();
+    thread::spawn(move || {
+        let mut chunk = [0u8; 64 * 1024];
+        loop {
+            match response.read(&mut chunk) {
+                Ok(0) => break,
+                Ok(n) => {
+                    if tx.send(Ok(chunk[..n].to_vec())).is_err() {
+                        break;
+                    }
+                }
+                Err(e) => {
+                    let _ = tx.send(Err(format!("download failed: {e}")));
+                    break;
+                }
+            }
+        }
+    });
+
     let mut buffer = Vec::new();
-    let mut chunk = [0u8; 64 * 1024];
     let mut downloaded: u64 = 0;
     let mut last_emit = Instant::now();
+    let stall_timeout = Duration::from_secs(STALL_TIMEOUT_SECS);
 
     loop {
-        let read = response
-            .read(&mut chunk)
-            .map_err(|e| format!("download failed: {e}"))?;
-        if read == 0 {
-            break;
-        }
-        buffer.extend_from_slice(&chunk[..read]);
-        downloaded += read as u64;
+        let chunk = match rx.recv_timeout(stall_timeout) {
+            Ok(Ok(chunk)) => chunk,
+            Ok(Err(e)) => return Err(e),
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                return Err(format!(
+                    "download stalled: no data received for {STALL_TIMEOUT_SECS}s"
+                ));
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+        };
+
+        buffer.extend_from_slice(&chunk);
+        downloaded += chunk.len() as u64;
 
         // Backstop for when content-length was absent or understated —
         // stop pulling data from a runaway/misbehaving server rather than

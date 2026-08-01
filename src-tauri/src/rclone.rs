@@ -1,12 +1,20 @@
 use crate::cloud_config::CloudRemoteConfig;
 use crate::usb_root;
 use serde::Serialize;
+use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 const REMOTE_NAME: &str = "lockbox_remote";
+
+/// Passed to every rclone (and rclone-adjacent) subprocess spawn. Without
+/// it, Windows briefly flashes a console window for each one — rclone.exe
+/// is a console-subsystem binary, so every sync/restore/test/obscure call
+/// pops one open and closes it again, which reads as the app glitching even
+/// though nothing actually failed.
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 /// USB_ROOT/Tools/rclone.exe — the embedded binary. Nothing here assumes
 /// rclone is installed on the host.
@@ -123,7 +131,8 @@ pub async fn run_rclone_sync(
         .envs(env_vars)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .stderr(Stdio::piped())
+        .creation_flags(CREATE_NO_WINDOW);
 
     let mut child = command
         .spawn()
@@ -202,7 +211,8 @@ pub async fn run_rclone_restore(
         .envs(env_vars)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .stderr(Stdio::piped())
+        .creation_flags(CREATE_NO_WINDOW);
 
     let mut child = command
         .spawn()
@@ -274,7 +284,8 @@ pub async fn run_rclone_test(
         .envs(env_vars)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .stderr(Stdio::piped())
+        .creation_flags(CREATE_NO_WINDOW);
 
     let mut child = command
         .spawn()
@@ -361,6 +372,7 @@ async fn remote_has_content(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        .creation_flags(CREATE_NO_WINDOW)
         .output()
         .await
         .map_err(|e| format!("failed to inspect remote target: {e}"))?;
@@ -495,6 +507,7 @@ fn obscure_password(rclone_path: &Path, plaintext: &str) -> Result<String, Strin
         .arg(plaintext)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        .creation_flags(CREATE_NO_WINDOW)
         .output()
         .map_err(|e| format!("rclone obscure failed: {e}"))?;
 
@@ -521,6 +534,7 @@ fn resolve_rclone_binary(root: &Path) -> Result<PathBuf, String> {
         .arg("version")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW)
         .status();
 
     if probe.is_ok() {

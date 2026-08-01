@@ -2,8 +2,13 @@ use serde::Serialize;
 use serde_json::Value;
 use std::fs;
 use std::io::Write;
+use std::os::windows::process::CommandExt;
 use tauri::AppHandle;
 use tauri::Manager;
+
+/// See the identical constant in rclone.rs — suppresses the console window
+/// flash a `cmd.exe` spawn would otherwise cause.
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -259,6 +264,7 @@ fn apply_windows_portable_update(app_handle: &AppHandle, download_url: &str) -> 
         .arg(&updater_script_str)
         .arg(&current_exe_str)
         .arg(&temp_new_str)
+        .creation_flags(CREATE_NO_WINDOW)
         .spawn()
         .map_err(|e| format!("failed to launch updater helper: {e}"))?;
 

@@ -1,7 +1,15 @@
 use crate::state::{lock_recover, AppState};
 use serde::Serialize;
+use std::os::windows::process::CommandExt;
 use std::path::Path;
 use tauri::{AppHandle, State};
+
+/// See the identical constant in rclone.rs — same reason: without it,
+/// spawning a console-subsystem helper (here, PowerShell) briefly flashes a
+/// window even though `-WindowStyle Hidden` is also passed, since that only
+/// takes effect once PowerShell itself starts running, after the console
+/// host window has already been created.
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -120,6 +128,7 @@ if ($drive) {{ $drive.InvokeVerb('Eject') }}
         .arg("Hidden")
         .arg("-Command")
         .arg(&script)
+        .creation_flags(CREATE_NO_WINDOW)
         .spawn()
         .map_err(|e| format!("failed to launch eject helper: {e}"))?;
 

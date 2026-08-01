@@ -5,11 +5,18 @@ use sha2::{Digest, Sha256};
 use std::env;
 use std::fs::File;
 use std::io::{Cursor, Read};
+use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
+
+/// See the identical constant in rclone.rs. Most silent-install-capable
+/// installers (NSIS/InnoSetup) are GUI-subsystem anyway and wouldn't flash a
+/// console regardless, but this is harmless for those and protects against
+/// any console-subsystem installer too.
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 /// Sidecar file written inside `Apps/<id>/` recording where the launcher
 /// actually ended up, when that differs from the catalog's declared path
@@ -480,7 +487,8 @@ fn run_with_timeout(
 ) -> Result<std::process::Output, String> {
     command
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped());
+        .stderr(std::process::Stdio::piped())
+        .creation_flags(CREATE_NO_WINDOW);
 
     let mut child = command
         .spawn()

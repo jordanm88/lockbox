@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { NAV_ITEMS, TabId } from "../types";
 import StorageMeter from "./StorageMeter";
 import ConfirmDialog from "./ConfirmDialog";
@@ -69,7 +70,11 @@ export default function Sidebar({ activeTab, onSelectTab, onLock }: SidebarProps
         <div className="px-4 pt-3">
           <button
             type="button"
-            onClick={() => window.open("https://www.paypal.com/paypalme/jord4nm88", "_blank")}
+            onClick={() =>
+              openUrl("https://www.paypal.com/paypalme/jord4nm88").catch((err) =>
+                console.error("Failed to open donation link", err),
+              )
+            }
             className="flex w-full items-center justify-center gap-1.5 rounded-full border border-dashed border-amber-200 bg-amber-50 py-2 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100"
           >
             💛 Fund the project

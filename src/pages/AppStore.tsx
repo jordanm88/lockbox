@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import PageHeader from "../components/PageHeader";
 import ActionButton from "../components/ActionButton";
 import ConfirmDialog from "../components/ConfirmDialog";
@@ -338,7 +339,13 @@ export default function AppStore() {
                         {isInstalling ? "Installing…" : "⬇ Install"}
                       </ActionButton>
                       {app.homepage && (
-                        <ActionButton type="button" onClick={() => app.homepage && window.open(app.homepage, "_blank")}>
+                        <ActionButton
+                          type="button"
+                          onClick={() =>
+                            app.homepage &&
+                            openUrl(app.homepage).catch((err) => console.error("Failed to open homepage link", err))
+                          }
+                        >
                           Info
                         </ActionButton>
                       )}

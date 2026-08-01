@@ -664,6 +664,89 @@ pub fn delete_vault_entry(state: State<AppState>, relative_path: String) -> Resu
     Ok(())
 }
 
+/// `destination` comes from a native OS save-file dialog the user picked
+/// interactively — unlike every other path in this file, it's intentionally
+/// NOT sandboxed to the vault via `normalize_relative_path`/`safe_join`,
+/// since the entire point of exporting is writing outside the vault, to
+/// wherever the user themselves chose via a dialog the frontend can't spoof.
+#[tauri::command]
+pub fn export_vault_file(
+    state: State<AppState>,
+    relative_path: String,
+    destination: String,
+) -> Result<(), String> {
+    let guard = lock_recover(&state.vault_key);
+    let key = guard.as_ref().ok_or("vault is locked")?;
+
+    let vault_dir = usb_root::vault_dir(&state.root);
+    let plaintext = read_decrypted_file(&vault_dir, key, &relative_path)?;
+
+    let destination_path = PathBuf::from(&destination);
+    if let Some(parent) = destination_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("failed to create destination directory: {e}"))?;
+    }
+    fs::write(&destination_path, plaintext)
+        .map_err(|e| format!("failed to write exported file: {e}"))
+}
+
+/// Decrypts every file under `relative_path` (a vault folder) and writes it
+/// into `destination_dir` (a host directory chosen via a native dialog),
+/// recreating the folder's internal structure. Returns how many files were
+/// exported.
+#[tauri::command]
+pub fn export_vault_folder(
+    state: State<AppState>,
+    relative_path: String,
+    destination_dir: String,
+) -> Result<u32, String> {
+    let guard = lock_recover(&state.vault_key);
+    let key = guard.as_ref().ok_or("vault is locked")?;
+
+    let vault_dir = usb_root::vault_dir(&state.root);
+    let normalized = normalize_relative_path(&relative_path)?;
+    let index = load_or_upgrade_index(&vault_dir, key)?;
+    let data_dir = ensure_data_dir(&vault_dir)?;
+    let dest_root = PathBuf::from(&destination_dir);
+    let prefix = format!("{normalized}/");
+
+    let mut exported = 0u32;
+    for entry in &index.entries {
+        if entry.is_dir || !entry.original_path.starts_with(&prefix) {
+            continue;
+        }
+
+        let relative_to_folder = entry
+            .original_path
+            .strip_prefix(&prefix)
+            .unwrap_or(entry.original_path.as_str());
+        let out_path = dest_root.join(relative_to_folder);
+
+        if let Some(parent) = out_path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("failed to create directory: {e}"))?;
+        }
+
+        let blob_name = entry
+            .blob_name
+            .as_ref()
+            .ok_or("missing blob mapping for file")?;
+        let sealed = fs::read(data_dir.join(blob_name))
+            .map_err(|e| format!("failed to read encrypted file: {e}"))?;
+        let plaintext = crypto::decrypt_bytes(key, &sealed)?;
+
+        fs::write(&out_path, plaintext)
+            .map_err(|e| format!("failed to write {}: {e}", out_path.display()))?;
+        exported += 1;
+    }
+
+    if exported == 0 {
+        return Err("no files found in that folder to export".to_string());
+    }
+
+    Ok(exported)
+}
+
 #[tauri::command]
 pub fn uninstall_app(state: State<AppState>, app_id: String) -> Result<(), String> {
     let root = &state.root;

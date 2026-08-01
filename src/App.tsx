@@ -7,6 +7,7 @@ import CloudSync from "./pages/CloudSync";
 import Settings from "./pages/Settings";
 import { lockVault, unlockVault } from "./lib/vaultBridge";
 import { loadCloudConfig, syncVaultNow } from "./lib/cloudSyncBridge";
+import { getErrorMessage } from "./lib/errors";
 import { TabId } from "./types";
 
 function readStoredBoolean(key: string): boolean {
@@ -88,7 +89,7 @@ export default function App() {
         }
       } catch (err) {
         if (cancelled) return;
-        const message = err instanceof Error ? err.message : "Auto-sync failed.";
+        const message = getErrorMessage(err, "Auto-sync failed.");
         // A sync already running (manual or a previous tick that overran the
         // interval) isn't a failure worth surfacing — just skip this tick.
         if (message.includes("already running")) return;

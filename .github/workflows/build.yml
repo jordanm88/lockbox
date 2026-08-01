@@ -14,7 +14,7 @@ on:
       publish_release:
         description: 'If true, create a draft GitHub release with the build artifacts (disabled by default)'
         required: false
-        default: 'true'
+        default: 'false'
 
 jobs:
   build:

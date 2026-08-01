@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { vaultExists } from "../lib/vaultBridge";
+import { getErrorMessage } from "../lib/errors";
 import pkg from "../../package.json";
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -61,7 +62,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
         triggerError("Incorrect passphrase. Try again.");
       }
     } catch (err) {
-      triggerError(err instanceof Error ? err.message : "Unable to reach the vault backend.");
+      triggerError(getErrorMessage(err, "Unable to reach the vault backend."));
     } finally {
       setBusy(false);
     }

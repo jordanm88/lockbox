@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import PageHeader from "../components/PageHeader";
+import { getErrorMessage } from "../lib/errors";
 import {
   CloudRemoteConfig,
   RcloneOutputLine,
@@ -121,7 +122,7 @@ export default function CloudSync({
       .then((existing) => {
         if (existing) setConfig(existing);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load cloud config."))
+      .catch((err) => setError(getErrorMessage(err, "Failed to load cloud config.")))
       .finally(() => setLoading(false));
 
     const outputUnlisten = onRcloneOutput((line: RcloneOutputLine) => {
@@ -164,7 +165,7 @@ export default function CloudSync({
       await saveCloudConfig(config);
       setSaved(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save cloud config.");
+      setError(getErrorMessage(err, "Failed to save cloud config."));
     } finally {
       setSaving(false);
     }
@@ -181,7 +182,7 @@ export default function CloudSync({
       setSyncStatus("success");
     } catch (err) {
       setSyncStatus("failed");
-      const message = err instanceof Error ? err.message : "Sync failed.";
+      const message = getErrorMessage(err, "Sync failed.");
       setError(message);
       setLastErrorDetail(message);
     }
@@ -199,7 +200,7 @@ export default function CloudSync({
       setTestResult("ok");
     } catch (err) {
       setTestResult("failed");
-      const message = err instanceof Error ? err.message : "Connection test failed.";
+      const message = getErrorMessage(err, "Connection test failed.");
       setError(message);
       setLastErrorDetail(message);
     } finally {

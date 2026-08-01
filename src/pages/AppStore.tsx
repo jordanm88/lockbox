@@ -3,6 +3,7 @@ import PageHeader from "../components/PageHeader";
 import ActionButton from "../components/ActionButton";
 import ConfirmDialog from "../components/ConfirmDialog";
 import pkg from "../../package.json";
+import { getErrorMessage } from "../lib/errors";
 import {
   CatalogEntry,
   getAppCatalog,
@@ -40,7 +41,7 @@ export default function AppStore() {
       setApps(await getAppCatalog());
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load app catalog.");
+      setError(getErrorMessage(err, "Failed to load app catalog."));
     } finally {
       setLoading(false);
     }
@@ -72,7 +73,7 @@ export default function AppStore() {
       await installApp(entry.id);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to install ${entry.name}.`);
+      setError(getErrorMessage(err, `Failed to install ${entry.name}.`));
     } finally {
       setInstallingIds((current) => {
         const next = new Set(current);
@@ -103,7 +104,7 @@ export default function AppStore() {
       await uninstallApp(uninstallTarget.id);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to uninstall ${uninstallTarget.name}.`);
+      setError(getErrorMessage(err, `Failed to uninstall ${uninstallTarget.name}.`));
     } finally {
       setUninstallTarget(null);
       setUninstallOpen(false);
@@ -141,7 +142,7 @@ export default function AppStore() {
     try {
       await launchPortableApp(entry.launcherPath);
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to launch ${entry.name}.`);
+      setError(getErrorMessage(err, `Failed to launch ${entry.name}.`));
     }
   }
 

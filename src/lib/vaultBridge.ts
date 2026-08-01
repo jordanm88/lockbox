@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { open, save } from "@tauri-apps/plugin-dialog";
 
 export interface VaultFileEntry {
   name: string;
@@ -111,4 +112,28 @@ export async function readAndDecryptFile(
 
 export function deleteVaultEntry(relativePath: string): Promise<void> {
   return invoke<void>("delete_vault_entry", { relativePath });
+}
+
+/**
+ * Prompts the user with a native save-file dialog, then decrypts the vault
+ * file and writes the plaintext there. Returns false (without touching the
+ * vault) if the user cancels the dialog.
+ */
+export async function exportVaultFile(relativePath: string): Promise<boolean> {
+  const suggestedName = relativePath.split("/").pop() || relativePath;
+  const destination = await save({ defaultPath: suggestedName });
+  if (!destination) return false;
+  await invoke<void>("export_vault_file", { relativePath, destination });
+  return true;
+}
+
+/**
+ * Prompts the user with a native folder-picker dialog, then decrypts every
+ * file under the given vault folder into it, preserving structure. Returns
+ * the number of files exported, or null if the user cancels the dialog.
+ */
+export async function exportVaultFolder(relativePath: string): Promise<number | null> {
+  const destinationDir = await open({ directory: true });
+  if (!destinationDir || Array.isArray(destinationDir)) return null;
+  return invoke<number>("export_vault_folder", { relativePath, destinationDir });
 }

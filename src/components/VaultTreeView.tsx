@@ -7,6 +7,7 @@ interface Props {
   onClearSearch?: () => void;
   onView: (entry: VaultFileEntry) => void;
   onDelete: (entry: VaultFileEntry) => void;
+  onExport: (entry: VaultFileEntry) => void;
 }
 
 interface BrowserRow {
@@ -64,7 +65,7 @@ function fileVisual(name: string, isDir: boolean): FileVisual {
   return { icon: "📦", bg: "bg-slate-100", text: "text-slate-500" };
 }
 
-export default function VaultTreeView({ entries, searchQuery = "", onClearSearch, onView, onDelete }: Props) {
+export default function VaultTreeView({ entries, searchQuery = "", onClearSearch, onView, onDelete, onExport }: Props) {
   const [currentPath, setCurrentPath] = useState("");
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
 
@@ -205,7 +206,7 @@ export default function VaultTreeView({ entries, searchQuery = "", onClearSearch
         {viewMode === "list" || isSearching ? (
           <div className="overflow-x-auto">
             <div className="min-w-[720px]">
-              <div className="grid grid-cols-[minmax(0,1fr)_120px_110px_140px] gap-4 border-b border-slate-200 bg-slate-50 px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <div className="grid grid-cols-[minmax(0,1fr)_120px_110px_210px] gap-4 border-b border-slate-200 bg-slate-50 px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
                 <div>Name</div>
                 <div>Type</div>
                 <div className="text-right">Size</div>
@@ -226,7 +227,7 @@ export default function VaultTreeView({ entries, searchQuery = "", onClearSearch
                     return (
                       <div
                         key={row.fullPath}
-                        className="grid grid-cols-[minmax(0,1fr)_120px_110px_140px] items-center gap-4 px-5 py-3 transition hover:bg-slate-50"
+                        className="grid grid-cols-[minmax(0,1fr)_120px_110px_210px] items-center gap-4 px-5 py-3 transition hover:bg-slate-50"
                         style={{ paddingLeft: isSearching ? undefined : `${1.25 + Math.min(row.depth, 4) * 0.25}rem` }}
                       >
                         <button
@@ -258,6 +259,9 @@ export default function VaultTreeView({ entries, searchQuery = "", onClearSearch
                               View
                             </button>
                           )}
+                          <button type="button" onClick={() => onExport(full)} className="rounded-full px-3 py-1.5 text-sm font-medium text-emerald-600 hover:bg-emerald-50">
+                            Export
+                          </button>
                           <button type="button" onClick={() => onDelete(full)} className="rounded-full px-3 py-1.5 text-sm font-medium text-slate-400 hover:bg-rose-50 hover:text-rose-600">
                             Delete
                           </button>
@@ -304,6 +308,9 @@ export default function VaultTreeView({ entries, searchQuery = "", onClearSearch
                             View
                           </button>
                         )}
+                        <button type="button" onClick={() => onExport(full)} className="rounded-full px-3 py-1.5 text-sm font-medium text-emerald-600 hover:bg-emerald-50">
+                          Export
+                        </button>
                         <button type="button" onClick={() => onDelete(full)} className="rounded-full px-3 py-1.5 text-sm font-medium text-slate-400 hover:bg-rose-50 hover:text-rose-600">
                           Delete
                         </button>

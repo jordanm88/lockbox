@@ -5,16 +5,26 @@ use sha2::{Digest, Sha256};
 use std::env;
 use std::fs::File;
 use std::io::{Cursor, Read};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 
-// A stalled/dead connection would otherwise sit for the full timeout before
-// failing, which for a portable-app-sized download reads as "the app is
-// unresponsive" long before it actually gives up. These are single/couple
-// hundred MB files; 3 minutes is generous for a working connection and fails
-// fast on a dead one.
-const DOWNLOAD_TIMEOUT_SECS: u64 = 180;
+/// Sidecar file written inside `Apps/<id>/` recording where the launcher
+/// actually ended up, when that differs from the catalog's declared path
+/// (see `record_actual_launcher`). `store_commands.rs` checks for this
+/// before falling back to the catalog's own path.
+pub(crate) const LAUNCHER_RECORD_FILE: &str = ".lockbox-launcher";
+
+// A flat overall timeout doesn't fit here: portable app sizes vary wildly
+// (a ~10MB CLI tool vs. VS Code's ~335MB Electron archive), so any single
+// fixed duration is either too short for a legitimate large download on an
+// ordinary connection, or too long to catch a genuinely dead one quickly.
+// `read_timeout` below solves this properly — it resets on every chunk of
+// data received, so it only fires on an actual stall (no bytes arriving at
+// all for this long), not on a slow-but-still-progressing transfer. A
+// connection that can't even be established still needs its own bound.
+const CONNECT_TIMEOUT_SECS: u64 = 20;
+const STALL_TIMEOUT_SECS: u64 = 30;
 #[cfg(windows)]
 const INSTALLER_TIMEOUT: Duration = Duration::from_secs(120);
 const PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(120);
@@ -114,6 +124,17 @@ fn install_app_inner(
         ArchiveType::Installer => install_windows_installer(app_handle, app_id, &bytes, install_dir, &target.launcher)?,
     }
 
+    // Single-file installs always land the launcher exactly where we said
+    // to — only archive-based ones can unpack into a version-named wrapper
+    // folder (e.g. a zip containing `vlc-3.0.23/vlc.exe` instead of
+    // `vlc.exe` at the root), which would otherwise both fail "is this
+    // installed?" checks and fail to launch, and re-break every time the
+    // upstream project bumps its version number. Record wherever the file
+    // actually ended up instead of assuming the catalog's declared path.
+    if matches!(target.archive_type, ArchiveType::Zip | ArchiveType::TarGz) {
+        record_actual_launcher(install_dir, &target.launcher)?;
+    }
+
     emit_progress(
         app_handle,
         app_id,
@@ -130,7 +151,8 @@ fn download_with_progress(
     target: &TargetSpec,
 ) -> Result<Vec<u8>, String> {
     let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(DOWNLOAD_TIMEOUT_SECS))
+        .connect_timeout(Duration::from_secs(CONNECT_TIMEOUT_SECS))
+        .read_timeout(Duration::from_secs(STALL_TIMEOUT_SECS))
         .build()
         .map_err(|e| format!("failed to build download client: {e}"))?;
 
@@ -253,6 +275,70 @@ fn install_single_file(bytes: &[u8], dest_dir: &Path, launcher_name: &str) -> Re
     std::fs::write(&dest_path, bytes)
         .map_err(|e| format!("failed to write {}: {e}", dest_path.display()))?;
     apply_unix_permissions(&dest_path, Some(0o755));
+    Ok(())
+}
+
+/// If `launcher` exists exactly where the catalog says, do nothing. If not,
+/// search the whole install directory for a file with that exact name and,
+/// when there's exactly one match, record its real relative path in
+/// `LAUNCHER_RECORD_FILE` so lookups don't need to re-search every time.
+fn record_actual_launcher(install_dir: &Path, launcher: &str) -> Result<(), String> {
+    let expected = paths::safe_join(install_dir, launcher)?;
+    if expected.is_file() {
+        return Ok(());
+    }
+
+    let target_name = Path::new(launcher)
+        .file_name()
+        .ok_or_else(|| format!("launcher path '{launcher}' has no file name"))?;
+
+    let mut matches = Vec::new();
+    find_by_name(install_dir, target_name, &mut matches)?;
+
+    let resolved = match matches.as_slice() {
+        [] => {
+            return Err(format!(
+                "installed archive doesn't contain a file named '{}' anywhere — the catalog entry's launcher path is probably wrong for this build",
+                target_name.to_string_lossy()
+            ));
+        }
+        [single] => single
+            .strip_prefix(install_dir)
+            .map_err(|_| "internal error computing launcher path".to_string())?
+            .to_string_lossy()
+            .replace('\\', "/"),
+        multiple => {
+            let listed = multiple
+                .iter()
+                .filter_map(|p| p.strip_prefix(install_dir).ok())
+                .map(|p| p.to_string_lossy().replace('\\', "/"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(format!(
+                "found {} files named '{}', can't tell which is the launcher: {listed}",
+                multiple.len(),
+                target_name.to_string_lossy()
+            ));
+        }
+    };
+
+    std::fs::write(install_dir.join(LAUNCHER_RECORD_FILE), &resolved)
+        .map_err(|e| format!("failed to record launcher path: {e}"))?;
+    Ok(())
+}
+
+fn find_by_name(dir: &Path, name: &std::ffi::OsStr, out: &mut Vec<PathBuf>) -> Result<(), String> {
+    for entry in
+        std::fs::read_dir(dir).map_err(|e| format!("failed to scan {}: {e}", dir.display()))?
+    {
+        let entry = entry.map_err(|e| format!("failed to read directory entry: {e}"))?;
+        let path = entry.path();
+        if path.is_dir() {
+            find_by_name(&path, name, out)?;
+        } else if path.file_name() == Some(name) {
+            out.push(path);
+        }
+    }
     Ok(())
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "lockbox"
-version = "0.2.2"
+version = "0.2.3-beta"
 description = "Lockbox — portable encrypted USB vault"
 edition = "2021"
 
@@ -31,6 +31,7 @@ sha2 = "0.10"
 hex = "0.4"
 tokio = { version = "1", features = ["process", "io-util", "rt"] }
 fs4 = "0.9"
+tauri-plugin-dialog = "2"
 
 [profile.release]
 panic = "abort"

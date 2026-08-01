@@ -1,7 +1,6 @@
 use crate::state::{lock_recover, AppState};
 use crate::{catalog, installer, paths, usb_root};
 use serde::Serialize;
-#[cfg(unix)]
 use std::path::Path;
 use tauri::{AppHandle, State};
 
@@ -19,6 +18,21 @@ pub struct CatalogEntry {
     launcher_path: Option<String>,
     size_bytes: Option<u64>,
     install_kind: Option<String>,
+}
+
+/// The catalog's declared launcher path, unless `installer::record_actual_launcher`
+/// recorded a different real location for this app (e.g. because the
+/// archive unpacked into a version-named wrapper folder) — see that
+/// function for why the two can disagree.
+fn effective_launcher_relative(apps_dir: &Path, app_id: &str, catalog_launcher: &str) -> String {
+    let record_path = apps_dir.join(app_id).join(installer::LAUNCHER_RECORD_FILE);
+    if let Ok(recorded) = std::fs::read_to_string(&record_path) {
+        let trimmed = recorded.trim();
+        if !trimmed.is_empty() {
+            return format!("{app_id}/{trimmed}");
+        }
+    }
+    format!("{app_id}/{catalog_launcher}")
 }
 
 fn install_kind_label(target: &catalog::TargetSpec) -> String {
@@ -45,7 +59,8 @@ pub fn get_app_catalog(
         .into_iter()
         .map(|app| {
             let target = app.targets.for_current_os();
-            let launcher_path = target.map(|t| format!("{}/{}", app.id, t.launcher));
+            let launcher_path =
+                target.map(|t| effective_launcher_relative(&apps_dir, &app.id, &t.launcher));
             let installed = launcher_path
                 .as_ref()
                 .map(|relative| apps_dir.join(relative).is_file())

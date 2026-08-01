@@ -23,6 +23,7 @@ pub fn run() {
     };
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
             root,
             vault_key: Mutex::new(None),
@@ -49,6 +50,8 @@ pub fn run() {
             store_commands::install_app,
             store_commands::launch_portable_app,
             commands::delete_vault_entry,
+            commands::export_vault_file,
+            commands::export_vault_folder,
             commands::uninstall_app,
             updates::get_latest_release,
             updates::check_portable_update,

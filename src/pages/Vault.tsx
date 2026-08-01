@@ -4,8 +4,18 @@ import VaultFilePreview from "../components/VaultFilePreview";
 import VaultTreeView from "../components/VaultTreeView";
 import NewMenu from "../components/NewMenu";
 import UploadToast from "../components/UploadToast";
-import { createFolder, encryptAndSaveFile, listVaultFiles, readAndDecryptFile, VaultFileEntry, deleteVaultEntry } from "../lib/vaultBridge";
+import {
+  createFolder,
+  encryptAndSaveFile,
+  listVaultFiles,
+  readAndDecryptFile,
+  VaultFileEntry,
+  deleteVaultEntry,
+  exportVaultFile,
+  exportVaultFolder,
+} from "../lib/vaultBridge";
 import { mimeTypeFor } from "../lib/mime";
+import { getErrorMessage } from "../lib/errors";
 import CreateFolderDialog from "../components/CreateFolderDialog";
 import ConfirmDialog from "../components/ConfirmDialog";
 import UploadPreviewPanel from "../components/UploadPreviewPanel";
@@ -78,7 +88,7 @@ export default function Vault() {
       setFiles(await listVaultFiles());
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to list vault files.");
+      setError(getErrorMessage(err, "Failed to list vault files."));
     } finally {
       setLoading(false);
     }
@@ -178,7 +188,7 @@ export default function Vault() {
       setPendingUpload([]);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed.");
+      setError(getErrorMessage(err, "Upload failed."));
     } finally {
       setUploading(false);
       setTimeout(() => setUploadProgress(null), 1200);
@@ -302,7 +312,27 @@ export default function Vault() {
       const objectUrl = URL.createObjectURL(blob);
       setPreview({ name: entry.name, objectUrl, mimeType });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to decrypt file.");
+      setError(getErrorMessage(err, "Failed to decrypt file."));
+    }
+  }
+
+  async function handleExport(entry: VaultFileEntry) {
+    setError(null);
+    setNotice(null);
+    try {
+      if (entry.isDir) {
+        const count = await exportVaultFolder(entry.name);
+        if (count !== null) {
+          setNotice(`Exported ${count} file${count === 1 ? "" : "s"} from "${entry.name}".`);
+        }
+      } else {
+        const exported = await exportVaultFile(entry.name);
+        if (exported) {
+          setNotice(`Exported "${entry.name}".`);
+        }
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, "Failed to export from vault."));
     }
   }
 
@@ -326,7 +356,7 @@ export default function Vault() {
       }
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete entry.");
+      setError(getErrorMessage(err, "Failed to delete entry."));
     } finally {
       setUploading(false);
       setConfirmTarget(null);
@@ -413,6 +443,7 @@ export default function Vault() {
           onClearSearch={() => setSearchQuery("")}
           onView={handleView}
           onDelete={requestDelete}
+          onExport={handleExport}
         />
       )}
 
@@ -464,7 +495,7 @@ export default function Vault() {
             setNotice(`Created folder: ${name}`);
             await refresh();
           } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to create folder.");
+            setError(getErrorMessage(err, "Failed to create folder."));
           } finally {
             setUploading(false);
           }

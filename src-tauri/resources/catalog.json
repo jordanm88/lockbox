@@ -60,6 +60,67 @@
           "launcher": "jq.exe"
         }
       }
+    },
+    {
+      "id": "everything",
+      "name": "Everything",
+      "description": "Instant file and folder name search across the whole system.",
+      "icon": "🔍",
+      "homepage": "https://www.voidtools.com/",
+      "category": "Utilities",
+      "targets": {
+        "windows": {
+          "url": "https://www.voidtools.com/Everything-1.4.1.1032.x64.zip",
+          "archiveType": "zip",
+          "launcher": "everything.exe"
+        }
+      }
+    },
+    {
+      "id": "vlc",
+      "name": "VLC Media Player",
+      "description": "Plays practically any video or audio format, no codecs required.",
+      "icon": "🎬",
+      "homepage": "https://www.videolan.org/vlc/",
+      "category": "Multimedia",
+      "targets": {
+        "windows": {
+          "url": "https://download.videolan.org/pub/videolan/vlc/last/win64/vlc-3.0.23-win64.zip",
+          "archiveType": "zip",
+          "launcher": "vlc.exe"
+        }
+      }
+    },
+    {
+      "id": "sharex",
+      "name": "ShareX",
+      "description": "Screenshot, screen recording, and file-sharing utility.",
+      "icon": "📸",
+      "homepage": "https://getsharex.com/",
+      "category": "Utilities",
+      "targets": {
+        "windows": {
+          "url": "https://github.com/ShareX/ShareX/releases/download/v21.0.0/ShareX-21.0.0-portable-x64.zip",
+          "archiveType": "zip",
+          "launcher": "ShareX.exe"
+        }
+      }
+    },
+    {
+      "id": "keepassxc",
+      "name": "KeePassXC",
+      "description": "Offline password manager with an encrypted local database.",
+      "icon": "🔑",
+      "homepage": "https://keepassxc.org/",
+      "category": "Security",
+      "targets": {
+        "windows": {
+          "url": "https://github.com/keepassxreboot/keepassxc/releases/download/2.7.12/KeePassXC-2.7.12-Win64.zip",
+          "archiveType": "zip",
+          "sha256": "958234b0669d757b53eacf42bdd5de0fa1cc1ab7527709ddf4f7e29c06a8305f",
+          "launcher": "KeePassXC.exe"
+        }
+      }
     }
   ]
 }

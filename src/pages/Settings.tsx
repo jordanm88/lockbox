@@ -2,6 +2,7 @@ import { useState } from "react";
 import PageHeader from "../components/PageHeader";
 import { useEffect } from "react";
 import { applyPortableUpdate, checkPortableUpdate } from "../lib/updateBridge";
+import { getErrorMessage } from "../lib/errors";
 import pkg from "../../package.json";
 
 const AUTO_LOCK_OPTIONS = ["1 minute", "5 minutes", "15 minutes", "Never"];
@@ -62,7 +63,7 @@ export default function Settings({ onLock }: SettingsProps) {
       await applyPortableUpdate(info.assetDownloadUrl);
       setUpdateStatus("Applying update and restarting...");
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Update check failed.";
+      const message = getErrorMessage(e, "Update check failed.");
       setUpdateStatus(`Update failed: ${message}`);
       console.debug("update check failed", e);
     } finally {

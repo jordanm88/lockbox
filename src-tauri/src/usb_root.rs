@@ -24,11 +24,12 @@ fn ensure_layout(root: &Path) -> io::Result<()> {
     // aborts startup with a visible error rather than limping along).
     std::fs::create_dir_all(root.join("Vault"))?;
 
-    // Apps/, ThirdPartyApps/, and Tools/ are just scaffolding for later use
-    // (installing portable apps, detecting manually-dropped-in ones, and
-    // running the bundled rclone binary). A failure creating these shouldn't
-    // stop the vault itself from working, so these are best-effort.
-    for dir in ["Apps", "ThirdPartyApps", "Tools"] {
+    // Apps/, Third Party Apps/, and Tools/ are just scaffolding for later
+    // use (installing portable apps, detecting manually-dropped-in ones,
+    // and running the bundled rclone binary). A failure creating these
+    // shouldn't stop the vault itself from working, so these are
+    // best-effort.
+    for dir in ["Apps", "Third Party Apps", "Tools"] {
         if let Err(e) = std::fs::create_dir_all(root.join(dir)) {
             eprintln!("warning: failed to create {dir}: {e}");
         }
@@ -76,7 +77,7 @@ pub fn apps_dir(root: &Path) -> PathBuf {
 /// uninstall) never mix with unmanaged, unverified folders someone copied in
 /// themselves. See `store_commands::scan_third_party_apps`.
 pub fn third_party_apps_dir(root: &Path) -> PathBuf {
-    root.join("ThirdPartyApps")
+    root.join("Third Party Apps")
 }
 
 pub fn tools_dir(root: &Path) -> PathBuf {

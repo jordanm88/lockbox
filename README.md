@@ -120,7 +120,7 @@ The packaging script creates this layout on the drive:
 
 - `Vault/`
 - `Apps/`
-- `ThirdPartyApps/`
+- `Third Party Apps/`
 - `Tools/`
 
 ```powershell
@@ -130,7 +130,7 @@ The packaging script creates this layout on the drive:
 
 The script is update-safe:
 
-- It preserves existing `Vault/`, `Apps/`, `ThirdPartyApps/`, and `Tools/` content.
+- It preserves existing `Vault/`, `Apps/`, `Third Party Apps/`, and `Tools/` content.
 - It replaces the Lockbox binary.
 - It refreshes the bundled `rclone` binary from the current official release.
 

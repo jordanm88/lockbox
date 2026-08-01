@@ -199,7 +199,7 @@ pub struct ThirdPartyApp {
     launcher_path: Option<String>,
 }
 
-/// Scans `ThirdPartyApps/` for portable apps the user copied in by hand
+/// Scans `Third Party Apps/` for portable apps the user copied in by hand
 /// (rather than installing through the App Store) so they still show up
 /// somewhere in the UI. Each immediate subfolder becomes one entry; the
 /// launcher is guessed as the largest non-helper .exe found anywhere inside
@@ -217,12 +217,12 @@ pub fn scan_third_party_apps(state: State<AppState>) -> Result<Vec<ThirdPartyApp
     let entries = match std::fs::read_dir(&root) {
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(e) => return Err(format!("failed to scan ThirdPartyApps: {e}")),
+        Err(e) => return Err(format!("failed to scan Third Party Apps: {e}")),
     };
 
     let mut apps = Vec::new();
     for entry in entries {
-        let entry = entry.map_err(|e| format!("failed to read ThirdPartyApps entry: {e}"))?;
+        let entry = entry.map_err(|e| format!("failed to read Third Party Apps entry: {e}"))?;
         let path = entry.path();
         if !path.is_dir() {
             continue;

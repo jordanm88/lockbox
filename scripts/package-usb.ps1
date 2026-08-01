@@ -78,7 +78,7 @@ if (-not (Test-Path $builtExe)) {
 }
 
 Write-Host "Setting up USB folder layout at $UsbDrivePath ..."
-foreach ($dir in @("Vault", "Apps", "ThirdPartyApps", "Tools")) {
+foreach ($dir in @("Vault", "Apps", "Third Party Apps", "Tools")) {
     New-Item -ItemType Directory -Force -Path (Join-Path $UsbDrivePath $dir) | Out-Null
 }
 
@@ -111,7 +111,7 @@ Write-Host "Done. USB layout:"
 Write-Host "  $UsbDrivePath\Lockbox-Windows.exe"
 Write-Host "  $UsbDrivePath\Vault\"
 Write-Host "  $UsbDrivePath\Apps\"
-Write-Host "  $UsbDrivePath\ThirdPartyApps\"
+Write-Host "  $UsbDrivePath\Third Party Apps\"
 Write-Host "  $UsbDrivePath\Tools\rclone.exe"
 Write-Host ""
 Write-Host "If Windows SmartScreen blocks the exe on first run, see docs/DISTRIBUTION.md."

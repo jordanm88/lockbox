@@ -88,7 +88,7 @@ host.
 
 ## 2. Package onto a USB drive
 
-The packaging script creates the `Vault/`, `Apps/`, `ThirdPartyApps/`,
+The packaging script creates the `Vault/`, `Apps/`, `Third Party Apps/`,
 `Tools/` layout (if not already present) and copies the built executable to
 `USB_ROOT` under its conventional name:
 
@@ -106,7 +106,7 @@ copy `rclone.exe` into `Tools/rclone.exe`. Cloud Sync will not work until
 that binary exists on the USB drive.
 
 > Updating an existing USB drive is safe: the packaging script preserves
-> existing `Vault/`, `Apps/`, `ThirdPartyApps/`, and `Tools/` content and
+> existing `Vault/`, `Apps/`, `Third Party Apps/`, and `Tools/` content and
 > only replaces the Lockbox executable itself. User data and installed apps
 > are left intact.
 

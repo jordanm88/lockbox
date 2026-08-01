@@ -34,7 +34,7 @@ export interface ThirdPartyApp {
   launcherPath: string | null;
 }
 
-/** Scans `ThirdPartyApps/` for apps the user copied in by hand. */
+/** Scans `Third Party Apps/` for apps the user copied in by hand. */
 export function scanThirdPartyApps(): Promise<ThirdPartyApp[]> {
   return invoke<ThirdPartyApp[]>("scan_third_party_apps");
 }

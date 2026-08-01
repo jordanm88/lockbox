@@ -3,6 +3,7 @@ import LockScreen from "./components/LockScreen";
 import Sidebar from "./components/Sidebar";
 import Vault from "./pages/Vault";
 import AppStore from "./pages/AppStore";
+import ThirdPartyApps from "./pages/ThirdPartyApps";
 import CloudSync from "./pages/CloudSync";
 import Settings from "./pages/Settings";
 import ConfirmDialog from "./components/ConfirmDialog";
@@ -280,6 +281,7 @@ export default function App() {
         <div className="mx-auto w-full max-w-7xl">
           {activeTab === "vault" && <Vault />}
           {activeTab === "appstore" && <AppStore />}
+          {activeTab === "thirdpartyapps" && <ThirdPartyApps />}
           {activeTab === "cloudsync" && (
             <CloudSync
               autoSyncEnabled={autoSyncEnabled}

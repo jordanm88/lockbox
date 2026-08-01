@@ -4,11 +4,9 @@ import VaultFilePreview from "../components/VaultFilePreview";
 import VaultTreeView from "../components/VaultTreeView";
 import PicturesGrid from "../components/PicturesGrid";
 import NewMenu from "../components/NewMenu";
-import UploadToast from "../components/UploadToast";
 import { IMAGE_ACCEPT, isImageFile } from "../lib/fileKind";
 import {
   createFolder,
-  encryptAndSaveFile,
   listVaultFiles,
   readAndDecryptFile,
   VaultFileEntry,
@@ -17,16 +15,20 @@ import {
   exportVaultFolder,
   exportVaultItems,
 } from "../lib/vaultBridge";
+import { FileWithPath } from "../lib/uploadManager";
 import { mimeTypeFor } from "../lib/mime";
 import { getErrorMessage } from "../lib/errors";
 import CreateFolderDialog from "../components/CreateFolderDialog";
 import ConfirmDialog from "../components/ConfirmDialog";
 import UploadPreviewPanel from "../components/UploadPreviewPanel";
 
-type FileWithPath = {
-  file: File;
-  relativePath: string;
-};
+interface VaultProps {
+  // Owned by App.tsx (not local state here) specifically so an upload
+  // started on this page keeps running, and stays visible via the toast
+  // App.tsx renders, even after navigating to a different tab.
+  uploading: boolean;
+  onStartUpload: (fileEntries: FileWithPath[], folderPaths?: string[]) => Promise<void>;
+}
 
 type WebkitFileSystemEntry = {
   isFile: boolean;
@@ -60,14 +62,6 @@ interface PreviewState {
   mimeType: string;
 }
 
-interface UploadProgressState {
-  completedFiles: number;
-  totalFiles: number;
-  completedBytes: number;
-  totalBytes: number;
-  currentFile: string | null;
-}
-
 interface CollectedEntries {
   files: FileWithPath[];
   // Every directory encountered during the walk, including ones with no
@@ -78,10 +72,13 @@ interface CollectedEntries {
   folders: string[];
 }
 
-export default function Vault() {
+export default function Vault({ uploading, onStartUpload }: VaultProps) {
   const [files, setFiles] = useState<VaultFileEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
+  // Distinct from the `uploading` prop: this covers delete/export/create-folder
+  // operations, which are local to this page and don't need to survive
+  // navigating away the way an in-progress upload does.
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewState | null>(null);
@@ -91,7 +88,6 @@ export default function Vault() {
   const [dragActive, setDragActive] = useState(false);
   const [pendingUpload, setPendingUpload] = useState<FileWithPath[]>([]);
   const [pendingFolders, setPendingFolders] = useState<string[]>([]);
-  const [uploadProgress, setUploadProgress] = useState<UploadProgressState | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sectionView, setSectionView] = useState<"files" | "pictures">("files");
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
@@ -110,6 +106,17 @@ export default function Vault() {
       setLoading(false);
     }
   }
+
+  // Refresh the listing the moment an upload (which may have been started
+  // from this page and kept running after navigating away) actually
+  // finishes, so newly-added files show up without needing a manual reload.
+  const wasUploadingRef = useRef(uploading);
+  useEffect(() => {
+    if (wasUploadingRef.current && !uploading) {
+      refresh();
+    }
+    wasUploadingRef.current = uploading;
+  }, [uploading]);
 
   useEffect(() => {
     refresh();
@@ -148,93 +155,6 @@ export default function Vault() {
       window.removeEventListener("drop", handleWindowDrop);
     };
   }, []);
-
-  async function uploadFiles(fileEntries: FileWithPath[], folderPaths: string[] = []) {
-    if (fileEntries.length === 0 && folderPaths.length === 0) return;
-    setUploading(true);
-    setError(null);
-    setNotice(null);
-
-    try {
-      // Folders first, shallowest first. The backend would create missing
-      // ancestors for any file automatically either way, but doing this
-      // explicitly is what makes an entirely-empty subfolder (or a branch
-      // that's empty at every level) actually survive the upload instead of
-      // silently vanishing — a plain list of files has no way to represent
-      // "this directory exists but has nothing in it."
-      const sortedFolders = [...folderPaths].sort((a, b) => a.split("/").length - b.split("/").length);
-      for (const folderPath of sortedFolders) {
-        await createFolder(folderPath);
-      }
-
-      if (fileEntries.length === 0) {
-        if (folderPaths.length > 0) {
-          setNotice(`Created ${folderPaths.length} folder${folderPaths.length === 1 ? "" : "s"}.`);
-        }
-        setPendingUpload([]);
-        setPendingFolders([]);
-        await refresh();
-        return;
-      }
-
-      const totalBytes = fileEntries.reduce((sum, entry) => sum + entry.file.size, 0);
-      setUploadProgress({
-        completedFiles: 0,
-        totalFiles: fileEntries.length,
-        completedBytes: 0,
-        totalBytes,
-        currentFile: fileEntries[0]?.relativePath ?? null,
-      });
-
-      const renamed: string[] = [];
-      let completedBytes = 0;
-      for (const [index, { file, relativePath }] of fileEntries.entries()) {
-        const bytesBeforeThisFile = completedBytes;
-        setUploadProgress({
-          completedFiles: index,
-          totalFiles: fileEntries.length,
-          completedBytes,
-          totalBytes,
-          currentFile: relativePath,
-        });
-        const bytes = new Uint8Array(await file.arrayBuffer());
-        // Progress updates as each chunk of *this* file lands, not just
-        // between files — otherwise a single large file leaves the bar
-        // sitting still for as long as it takes, which reads as frozen.
-        const savedAs = await encryptAndSaveFile(relativePath, bytes, (bytesSent) => {
-          setUploadProgress({
-            completedFiles: index,
-            totalFiles: fileEntries.length,
-            completedBytes: bytesBeforeThisFile + bytesSent,
-            totalBytes,
-            currentFile: relativePath,
-          });
-        });
-        if (savedAs !== relativePath) {
-          renamed.push(`${relativePath} → ${savedAs}`);
-        }
-        completedBytes = bytesBeforeThisFile + file.size;
-        setUploadProgress({
-          completedFiles: index + 1,
-          totalFiles: fileEntries.length,
-          completedBytes,
-          totalBytes,
-          currentFile: index + 1 < fileEntries.length ? fileEntries[index + 1].relativePath : null,
-        });
-      }
-      if (renamed.length > 0) {
-        setNotice(`Renamed to avoid overwriting existing files: ${renamed.join(", ")}`);
-      }
-      setPendingUpload([]);
-      setPendingFolders([]);
-      await refresh();
-    } catch (err) {
-      setError(getErrorMessage(err, "Upload failed."));
-    } finally {
-      setUploading(false);
-      setTimeout(() => setUploadProgress(null), 1200);
-    }
-  }
 
   function filesFromFileList(fileList: FileList | null): FileWithPath[] {
     if (!fileList || fileList.length === 0) return [];
@@ -366,7 +286,12 @@ export default function Vault() {
   }
 
   async function confirmPendingUpload() {
-    await uploadFiles(pendingUpload, pendingFolders);
+    const filesToUpload = pendingUpload;
+    const foldersToUpload = pendingFolders;
+    setPendingUpload([]);
+    setPendingFolders([]);
+    setNotice(null);
+    await onStartUpload(filesToUpload, foldersToUpload);
   }
 
   function cancelPendingUpload() {
@@ -440,7 +365,7 @@ export default function Vault() {
   async function handleBulkExport() {
     const paths = topLevelSelection();
     if (paths.length === 0) return;
-    setUploading(true);
+    setBusy(true);
     setError(null);
     setNotice(null);
     try {
@@ -452,7 +377,7 @@ export default function Vault() {
     } catch (err) {
       setError(getErrorMessage(err, "Failed to export selected items."));
     } finally {
-      setUploading(false);
+      setBusy(false);
     }
   }
 
@@ -463,7 +388,7 @@ export default function Vault() {
 
   async function confirmBulkDelete() {
     setBulkDeleteConfirmOpen(false);
-    setUploading(true);
+    setBusy(true);
     const paths = topLevelSelection();
     setError(null);
     setNotice(null);
@@ -484,7 +409,7 @@ export default function Vault() {
       setError(getErrorMessage(err, "Failed to delete selected items."));
       await refresh();
     } finally {
-      setUploading(false);
+      setBusy(false);
     }
   }
 
@@ -500,7 +425,7 @@ export default function Vault() {
   async function confirmDelete() {
     if (!confirmTarget) return;
     setConfirmOpen(false);
-    setUploading(true);
+    setBusy(true);
     const deletingName = confirmTarget.name;
     try {
       await deleteVaultEntry(deletingName);
@@ -514,7 +439,7 @@ export default function Vault() {
     } catch (err) {
       setError(getErrorMessage(err, "Failed to delete entry."));
     } finally {
-      setUploading(false);
+      setBusy(false);
       setConfirmTarget(null);
     }
   }
@@ -541,7 +466,7 @@ export default function Vault() {
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-3">
           <NewMenu
-            disabled={uploading || pendingUpload.length > 0 || pendingFolders.length > 0}
+            disabled={busy || uploading || pendingUpload.length > 0 || pendingFolders.length > 0}
             onUploadFiles={() => inputRef.current?.click()}
             onUploadFolder={() => folderInputRef.current?.click()}
             onCreateFolder={() => setCreateOpen(true)}
@@ -672,8 +597,6 @@ export default function Vault() {
         />
       )}
 
-      <UploadToast progress={uploadProgress} />
-
       {preview && (
         <VaultFilePreview
           name={preview.name}
@@ -688,7 +611,7 @@ export default function Vault() {
         onCancel={() => setCreateOpen(false)}
         onCreate={async (name) => {
           setCreateOpen(false);
-          setUploading(true);
+          setBusy(true);
           setError(null);
           setNotice(null);
           try {
@@ -698,7 +621,7 @@ export default function Vault() {
           } catch (err) {
             setError(getErrorMessage(err, "Failed to create folder."));
           } finally {
-            setUploading(false);
+            setBusy(false);
           }
         }}
       />
@@ -706,7 +629,11 @@ export default function Vault() {
       <ConfirmDialog
         open={confirmOpen}
         title={confirmTarget ? `Delete ${confirmTarget.name}?` : "Delete entry"}
-        description={confirmTarget ? "This action will permanently remove the file from the vault." : undefined}
+        description={
+          confirmTarget
+            ? `This action will permanently remove the ${confirmTarget.isDir ? "folder and everything inside it" : "file"} from the vault.`
+            : undefined
+        }
         confirmLabel="Delete"
         cancelLabel="Cancel"
         onConfirm={confirmDelete}

@@ -7,9 +7,11 @@ import ThirdPartyApps from "./pages/ThirdPartyApps";
 import CloudSync from "./pages/CloudSync";
 import Settings from "./pages/Settings";
 import ConfirmDialog from "./components/ConfirmDialog";
+import UploadToast from "./components/UploadToast";
 import { lockVault, unlockVault } from "./lib/vaultBridge";
 import { loadCloudConfig, syncVaultNow } from "./lib/cloudSyncBridge";
 import { applyPortableUpdate, checkPortableUpdate, PortableUpdateInfo } from "./lib/updateBridge";
+import { FileWithPath, runUpload, UploadProgressState } from "./lib/uploadManager";
 import { getErrorMessage } from "./lib/errors";
 import { AUTO_LOCK_MINUTES, AUTO_LOCK_OPTIONS, AutoLockOption, TabId } from "./types";
 
@@ -58,6 +60,13 @@ export default function App() {
   const [lastAutoSyncAt, setLastAutoSyncAt] = useState<string | null>(null);
   const [lastAutoSyncError, setLastAutoSyncError] = useState<string | null>(null);
 
+  // Lives here (not inside Vault) so an upload started on the Vault page
+  // keeps running — and stays visible via the toast rendered below — no
+  // matter which tab you switch to afterward, same reasoning as auto-sync
+  // and auto-lock above.
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgressState | null>(null);
+
   const [autoLockOption, setAutoLockOptionState] = useState<AutoLockOption>(readStoredAutoLockOption);
 
   function setAutoLockOption(next: AutoLockOption) {
@@ -101,6 +110,63 @@ export default function App() {
       localStorage.setItem("autoSyncIntervalMinutes", String(next));
     } catch {}
   }
+
+  async function startUpload(fileEntries: FileWithPath[], folderPaths: string[] = []) {
+    if (fileEntries.length === 0 && folderPaths.length === 0) return;
+    setUploading(true);
+    try {
+      const outcome = await runUpload(fileEntries, folderPaths, setUploadProgress);
+      if (fileEntries.length === 0) {
+        // Folder-only creation never emits byte progress, so there's no
+        // prior state to build the "done" card on top of.
+        setUploadProgress({
+          completedFiles: 0,
+          totalFiles: 0,
+          completedBytes: 0,
+          totalBytes: 0,
+          currentFile: null,
+          etaSeconds: null,
+          status: "done",
+          message: `Created ${outcome.folderCount} folder${outcome.folderCount === 1 ? "" : "s"}.`,
+        });
+      } else {
+        setUploadProgress((current) =>
+          current
+            ? {
+                ...current,
+                status: "done",
+                message:
+                  outcome.renamed.length > 0
+                    ? `Renamed to avoid overwriting: ${outcome.renamed.join(", ")}`
+                    : undefined,
+              }
+            : current,
+        );
+      }
+    } catch (err) {
+      setUploadProgress((current) => ({
+        completedFiles: current?.completedFiles ?? 0,
+        totalFiles: current?.totalFiles ?? fileEntries.length,
+        completedBytes: current?.completedBytes ?? 0,
+        totalBytes: current?.totalBytes ?? 0,
+        currentFile: null,
+        etaSeconds: null,
+        status: "error",
+        message: getErrorMessage(err, "Upload failed."),
+      }));
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  // Auto-dismiss the toast once an upload reaches a terminal state — errors
+  // stay up longer than a plain success, since they're more likely to need
+  // actually reading rather than just glancing at.
+  useEffect(() => {
+    if (!uploadProgress || uploadProgress.status === "uploading") return;
+    const timer = setTimeout(() => setUploadProgress(null), uploadProgress.status === "error" ? 6000 : 2500);
+    return () => clearTimeout(timer);
+  }, [uploadProgress]);
 
   async function handleUnlock(passphrase: string): Promise<boolean> {
     const ok = await unlockVault(passphrase);
@@ -279,7 +345,7 @@ export default function App() {
       <Sidebar activeTab={activeTab} onSelectTab={setActiveTab} onLock={handleLock} />
       <main className="flex-1 overflow-y-auto p-6 lg:p-8">
         <div className="mx-auto w-full max-w-7xl">
-          {activeTab === "vault" && <Vault />}
+          {activeTab === "vault" && <Vault uploading={uploading} onStartUpload={startUpload} />}
           {activeTab === "appstore" && <AppStore />}
           {activeTab === "thirdpartyapps" && <ThirdPartyApps />}
           {activeTab === "cloudsync" && (
@@ -323,6 +389,8 @@ export default function App() {
         onConfirm={handleUpdateNow}
         onCancel={handleUpdateLater}
       />
+
+      <UploadToast progress={uploadProgress} onDismiss={() => setUploadProgress(null)} />
     </div>
   );
 }

@@ -59,10 +59,7 @@ jobs:
           name: lockbox-${{ matrix.platform }}
           path: |
             src-tauri/target/release/bundle/
-            src-tauri/target/release/Lockbox
             src-tauri/target/release/Lockbox.exe
-            src-tauri/target/release/lockbox
-            src-tauri/target/release/lockbox.exe
           if-no-files-found: warn
           retention-days: 14
 
@@ -85,9 +82,13 @@ jobs:
       # in-app self-updater (updates.rs) only ever picks the portable exe —
       # it explicitly skips anything with "setup"/"installer" in the name —
       # so adding the installers here doesn't affect it (see
-      # docs/DISTRIBUTION.md). Matching both casings since the exact binary
-      # name has moved between `lockbox.exe` and `Lockbox.exe` across
-      # earlier changes.
+      # docs/DISTRIBUTION.md). The binary is always `Lockbox.exe` (matching
+      # Cargo.toml's `[[bin]] name`) — an earlier version of this workflow
+      # also matched a lowercase `lockbox.exe` pattern on the theory that
+      # Windows' case-insensitive filesystem would make upload-artifact
+      # produce both casings; it doesn't, so that pattern only ever matched
+      # zero files and failed the release outright once
+      # `fail_on_unmatched_files` was turned on.
       - name: Create draft GitHub release
         uses: softprops/action-gh-release@v2
         with:
@@ -96,7 +97,6 @@ jobs:
           fail_on_unmatched_files: true
           files: |
             artifacts/**/Lockbox.exe
-            artifacts/**/lockbox.exe
             artifacts/**/bundle/msi/*.msi
             artifacts/**/bundle/nsis/*.exe
 
@@ -156,7 +156,6 @@ jobs:
           fail_on_unmatched_files: true
           files: |
             artifacts/**/Lockbox.exe
-            artifacts/**/lockbox.exe
             artifacts/**/bundle/msi/*.msi
             artifacts/**/bundle/nsis/*.exe
 
@@ -178,6 +177,5 @@ jobs:
           fail_on_unmatched_files: true
           files: |
             artifacts/**/Lockbox.exe
-            artifacts/**/lockbox.exe
             artifacts/**/bundle/msi/*.msi
             artifacts/**/bundle/nsis/*.exe

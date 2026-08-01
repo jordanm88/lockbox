@@ -39,7 +39,11 @@ fn random_session_id() -> String {
     hex::encode(bytes)
 }
 
-#[tauri::command]
+// `async` dispatches this off the main thread instead of on it (see the
+// longer explanation on `store_commands::install_app`) — Argon2id key
+// derivation is deliberately CPU-expensive, which otherwise froze the whole
+// window on every single unlock attempt.
+#[tauri::command(async)]
 pub fn unlock_vault(state: State<AppState>, passphrase: String) -> Result<bool, String> {
     let vault_dir = usb_root::vault_dir(&state.root);
     let outcome = crypto::unlock(&vault_dir, &passphrase)?;
@@ -82,7 +86,11 @@ pub struct StorageInfo {
 /// within ~28 bytes/file of their plaintext size, close enough to display).
 /// Drive totals come from the filesystem the USB root lives on, so the meter
 /// reflects the actual drive's capacity, not some fixed/fake quota.
-#[tauri::command]
+///
+/// `async`: `dir_size` walks the whole vault recursively, which scales with
+/// file count, not just total size — see `store_commands::install_app` for
+/// why a plain `fn` here would otherwise block the main thread.
+#[tauri::command(async)]
 pub fn get_storage_info(state: State<AppState>) -> Result<StorageInfo, String> {
     let vault_dir = usb_root::vault_dir(&state.root);
     let vault_used_bytes = dir_size(&vault_dir).unwrap_or(0);
@@ -188,7 +196,10 @@ pub fn cancel_upload(state: State<AppState>, upload_id: String) -> Result<(), St
     Ok(())
 }
 
-#[tauri::command]
+// `async`: encrypts and writes the whole assembled upload to the USB drive
+// in one call — see `store_commands::install_app` for why a plain `fn`
+// would otherwise block the main thread for the entire write.
+#[tauri::command(async)]
 pub fn finish_upload(
     state: State<AppState>,
     upload_id: String,
@@ -529,7 +540,10 @@ pub struct DownloadHandle {
     total_bytes: u64,
 }
 
-#[tauri::command]
+// `async`: reads and decrypts the whole file into memory up front — see
+// `store_commands::install_app` for why a plain `fn` would otherwise block
+// the main thread for the entire read+decrypt of a large file.
+#[tauri::command(async)]
 pub fn begin_download(
     state: State<AppState>,
     relative_path: String,
@@ -669,7 +683,11 @@ pub fn delete_vault_entry(state: State<AppState>, relative_path: String) -> Resu
 /// NOT sandboxed to the vault via `normalize_relative_path`/`safe_join`,
 /// since the entire point of exporting is writing outside the vault, to
 /// wherever the user themselves chose via a dialog the frontend can't spoof.
-#[tauri::command]
+///
+/// `async`: reads, decrypts, and writes the whole file — see
+/// `store_commands::install_app` for why a plain `fn` would otherwise block
+/// the main thread for the duration.
+#[tauri::command(async)]
 pub fn export_vault_file(
     state: State<AppState>,
     relative_path: String,
@@ -694,7 +712,11 @@ pub fn export_vault_file(
 /// into `destination_dir` (a host directory chosen via a native dialog),
 /// recreating the folder's internal structure. Returns how many files were
 /// exported.
-#[tauri::command]
+///
+/// `async`: can decrypt and write out an entire folder's worth of files —
+/// see `store_commands::install_app` for why a plain `fn` would otherwise
+/// block the main thread for the whole operation.
+#[tauri::command(async)]
 pub fn export_vault_folder(
     state: State<AppState>,
     relative_path: String,
@@ -747,7 +769,10 @@ pub fn export_vault_folder(
     Ok(exported)
 }
 
-#[tauri::command]
+// `async`: `remove_dir_all` on a large installed app (hundreds of MB, many
+// files) is a real blocking cost — see `store_commands::install_app` for
+// why a plain `fn` would otherwise block the main thread for it.
+#[tauri::command(async)]
 pub fn uninstall_app(state: State<AppState>, app_id: String) -> Result<(), String> {
     let root = &state.root;
     let apps_dir = usb_root::apps_dir(root);

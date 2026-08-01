@@ -84,7 +84,14 @@ pub fn get_app_catalog(
     Ok(entries)
 }
 
-#[tauri::command]
+// `async` here doesn't change anything about this function's body (still
+// plain, blocking code) — it tells Tauri to dispatch it off the main thread
+// instead of on it. Without this, a Tauri command declared as a plain `fn`
+// runs directly on the main UI thread, so this function's download +
+// extract + (for installer-type apps) subprocess-wait, which can easily run
+// for seconds to minutes, was freezing the whole window ("Not Responding")
+// for its entire duration. See https://v2.tauri.app/develop/calling-rust/.
+#[tauri::command(async)]
 pub fn install_app(
     app_handle: AppHandle,
     state: State<AppState>,
@@ -162,8 +169,11 @@ pub struct ThirdPartyApp {
 /// it, since the main application binary is almost always the biggest file
 /// while uninstallers/updaters/crash-handlers are small. Re-run on every
 /// call rather than cached, so dropping in a new folder shows up on the
-/// App Store's next periodic refresh without restarting Lockbox.
-#[tauri::command]
+/// App Store's next periodic refresh without restarting Lockbox. Runs
+/// automatically every 20s from the frontend, so it must never block the
+/// main thread — see the comment on `install_app` above for why `async` is
+/// needed here even though the function body itself doesn't await anything.
+#[tauri::command(async)]
 pub fn scan_third_party_apps(state: State<AppState>) -> Result<Vec<ThirdPartyApp>, String> {
     let root = usb_root::third_party_apps_dir(&state.root);
 

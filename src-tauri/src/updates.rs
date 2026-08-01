@@ -23,13 +23,18 @@ pub struct ApplyUpdateResult {
     message: String,
 }
 
-#[tauri::command]
+// `async` on all three commands below dispatches them off the main thread —
+// see `store_commands::install_app` for the full explanation. Each one does
+// a blocking network call (to GitHub's API, or downloading an entire new
+// exe in apply_portable_update's case), which otherwise froze the whole
+// window for as long as the request took.
+#[tauri::command(async)]
 pub fn get_latest_release(app_handle: AppHandle) -> Result<Value, String> {
     let repo = read_repo_from_config(&app_handle)?;
     fetch_latest_release(&repo)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn check_portable_update(app_handle: AppHandle) -> Result<PortableUpdateInfo, String> {
     let repo = read_repo_from_config(&app_handle)?;
     let latest_release = fetch_latest_release(&repo)?;
@@ -64,7 +69,7 @@ pub fn check_portable_update(app_handle: AppHandle) -> Result<PortableUpdateInfo
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn apply_portable_update(
     app_handle: AppHandle,
     download_url: String,

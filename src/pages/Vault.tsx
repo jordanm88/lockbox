@@ -5,7 +5,7 @@ import VaultTreeView from "../components/VaultTreeView";
 import PicturesGrid from "../components/PicturesGrid";
 import NewMenu from "../components/NewMenu";
 import UploadToast from "../components/UploadToast";
-import { isImageFile } from "../lib/fileKind";
+import { IMAGE_ACCEPT, isImageFile } from "../lib/fileKind";
 import {
   createFolder,
   encryptAndSaveFile,
@@ -317,13 +317,32 @@ export default function Vault() {
   }
 
   async function handleFilesChosen(fileList: FileList | null) {
-    const entries = filesFromFileList(fileList);
+    let entries = filesFromFileList(fileList);
     if (entries.length === 0) {
       setNotice("No files selected.");
       return;
     }
     setError(null);
     setNotice(null);
+
+    // The file picker's `accept` filter only steers the OS dialog — most
+    // dialogs still let someone switch to "All files" and pick anything
+    // anyway, so this is the actual enforcement of "photos only" while
+    // browsing Pictures, not just a suggestion.
+    if (sectionView === "pictures") {
+      const skippedCount = entries.length - entries.filter((entry) => isImageFile(entry.relativePath)).length;
+      entries = entries.filter((entry) => isImageFile(entry.relativePath));
+      if (entries.length === 0) {
+        setNotice("Only image files can be added from the Pictures view.");
+        return;
+      }
+      if (skippedCount > 0) {
+        setNotice(
+          `Skipped ${skippedCount} non-image file${skippedCount === 1 ? "" : "s"} — only photos can be added from the Pictures view.`,
+        );
+      }
+    }
+
     setPendingUpload(entries);
     setPendingFolders([]);
   }
@@ -561,6 +580,7 @@ export default function Vault() {
           ref={inputRef}
           type="file"
           multiple
+          accept={sectionView === "pictures" ? IMAGE_ACCEPT : undefined}
           className="hidden"
           onChange={async (event) => {
             await handleFilesChosen(event.target.files);

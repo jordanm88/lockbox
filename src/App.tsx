@@ -70,6 +70,15 @@ export default function App() {
   const [updateAvailable, setUpdateAvailable] = useState<PortableUpdateInfo | null>(null);
   const [applyingUpdate, setApplyingUpdate] = useState(false);
   const [updatePromptError, setUpdatePromptError] = useState<string | null>(null);
+  const [manualCheckStatus, setManualCheckStatus] = useState("Idle");
+  const [manualChecking, setManualChecking] = useState(false);
+  const [lastCheckedAt, setLastCheckedAt] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem("lastUpdateCheckAt");
+    } catch {
+      return null;
+    }
+  });
 
   function setAutoUpdateEnabled(next: boolean) {
     setAutoUpdateEnabledState(next);
@@ -171,6 +180,27 @@ export default function App() {
     };
   }, [unlocked, autoLockOption]);
 
+  // The one and only place that decides "an update was found" — used by
+  // both the silent background timer below and the manual "Update now"
+  // button in Settings, so neither path can ever apply an update without
+  // going through the Now/Later prompt. There is deliberately no other way
+  // to reach `setUpdateAvailable`.
+  async function performUpdateCheck() {
+    const info = await checkPortableUpdate();
+    if (info.hasUpdate && info.assetDownloadUrl) {
+      setUpdateAvailable(info);
+    }
+    return info;
+  }
+
+  function recordLastChecked() {
+    const now = new Date().toISOString();
+    setLastCheckedAt(now);
+    try {
+      localStorage.setItem("lastUpdateCheckAt", now);
+    } catch {}
+  }
+
   // Background update checks: immediately on unlock, then on a recurring
   // schedule. Lives here (not Settings) so the schedule keeps running
   // regardless of which tab is open, same reasoning as auto-sync/auto-lock.
@@ -180,27 +210,43 @@ export default function App() {
   useEffect(() => {
     if (!unlocked || !autoUpdateEnabled) return;
 
-    let cancelled = false;
     async function runBackgroundCheck() {
+      recordLastChecked();
       try {
-        const info = await checkPortableUpdate();
-        if (!cancelled && info.hasUpdate && info.assetDownloadUrl) {
-          setUpdateAvailable(info);
-        }
+        await performUpdateCheck();
       } catch {
-        // Silent in the background — Settings' manual "Update now" button
-        // surfaces the same error directly if the user checks by hand.
+        // Silent in the background — the manual "Update now" button in
+        // Settings surfaces the same error directly if checked by hand.
       }
     }
 
     runBackgroundCheck();
     const timer = setInterval(runBackgroundCheck, UPDATE_CHECK_INTERVAL_MS);
 
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
+    return () => clearInterval(timer);
   }, [unlocked, autoUpdateEnabled]);
+
+  async function handleManualUpdateCheck() {
+    setManualChecking(true);
+    recordLastChecked();
+    setManualCheckStatus("Checking for updates…");
+    try {
+      const info = await performUpdateCheck();
+      if (!info.hasUpdate) {
+        setManualCheckStatus(`Up to date (v${info.currentVersion})`);
+      } else if (!info.assetDownloadUrl) {
+        setManualCheckStatus(
+          `Update found (v${info.latestVersion}) but no Windows EXE asset was found in the latest release.`,
+        );
+      } else {
+        setManualCheckStatus(`Update v${info.latestVersion} available.`);
+      }
+    } catch (err) {
+      setManualCheckStatus(`Update check failed: ${getErrorMessage(err, "unknown error")}`);
+    } finally {
+      setManualChecking(false);
+    }
+  }
 
   async function handleUpdateNow() {
     if (!updateAvailable?.assetDownloadUrl) return;
@@ -251,6 +297,10 @@ export default function App() {
               onChangeAutoLockOption={setAutoLockOption}
               autoUpdateEnabled={autoUpdateEnabled}
               onChangeAutoUpdateEnabled={setAutoUpdateEnabled}
+              onCheckForUpdateNow={handleManualUpdateCheck}
+              checkingForUpdate={manualChecking}
+              updateCheckStatus={manualCheckStatus}
+              lastUpdateCheckedAt={lastCheckedAt}
             />
           )}
         </div>

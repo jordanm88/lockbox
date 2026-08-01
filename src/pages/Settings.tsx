@@ -1,9 +1,6 @@
 import { useState } from "react";
 import PageHeader from "../components/PageHeader";
-import { applyPortableUpdate, checkPortableUpdate } from "../lib/updateBridge";
-import { getErrorMessage } from "../lib/errors";
 import { AUTO_LOCK_OPTIONS, AutoLockOption } from "../types";
-import pkg from "../../package.json";
 
 interface SettingsProps {
   onLock: () => void;
@@ -11,6 +8,14 @@ interface SettingsProps {
   onChangeAutoLockOption: (option: AutoLockOption) => void;
   autoUpdateEnabled: boolean;
   onChangeAutoUpdateEnabled: (enabled: boolean) => void;
+  // Checking for an update never applies one — App.tsx owns the single
+  // place that can do that, behind the Now/Later prompt. This button just
+  // triggers a check; if one's found, the prompt appears over whichever tab
+  // is open, not necessarily this one.
+  onCheckForUpdateNow: () => void;
+  checkingForUpdate: boolean;
+  updateCheckStatus: string;
+  lastUpdateCheckedAt: string | null;
 }
 
 export default function Settings({
@@ -19,57 +24,14 @@ export default function Settings({
   onChangeAutoLockOption,
   autoUpdateEnabled,
   onChangeAutoUpdateEnabled,
+  onCheckForUpdateNow,
+  checkingForUpdate,
+  updateCheckStatus,
+  lastUpdateCheckedAt,
 }: SettingsProps) {
   const [currentPass, setCurrentPass] = useState("");
   const [newPass, setNewPass] = useState("");
   const [confirmPass, setConfirmPass] = useState("");
-  const [updateStatus, setUpdateStatus] = useState<string>("Idle");
-  const [updating, setUpdating] = useState(false);
-  const [lastCheckedAt, setLastCheckedAt] = useState<string | null>(() => {
-    try {
-      return localStorage.getItem("lastUpdateCheckAt");
-    } catch {
-      return null;
-    }
-  });
-
-  function recordLastChecked() {
-    const now = new Date().toISOString();
-    setLastCheckedAt(now);
-    try {
-      localStorage.setItem("lastUpdateCheckAt", now);
-    } catch {}
-  }
-
-  async function runPortableUpdateCheck() {
-    setUpdating(true);
-    recordLastChecked();
-    try {
-      setUpdateStatus("Checking for updates...");
-      const info = await checkPortableUpdate();
-      if (!info.hasUpdate) {
-        setUpdateStatus(`Up to date (${pkg.version})`);
-        return;
-      }
-
-      if (!info.assetDownloadUrl) {
-        setUpdateStatus(
-          `Update found (${info.latestVersion}) but no Windows EXE asset was found in the latest release.`
-        );
-        return;
-      }
-
-      setUpdateStatus(`Downloading update ${info.latestVersion}...`);
-      await applyPortableUpdate(info.assetDownloadUrl);
-      setUpdateStatus("Applying update and restarting...");
-    } catch (e) {
-      const message = getErrorMessage(e, "Update check failed.");
-      setUpdateStatus(`Update failed: ${message}`);
-      console.debug("update check failed", e);
-    } finally {
-      setUpdating(false);
-    }
-  }
 
   return (
     <div>
@@ -158,15 +120,15 @@ export default function Settings({
             </div>
             <button
               type="button"
-              onClick={runPortableUpdateCheck}
-              disabled={updating}
+              onClick={onCheckForUpdateNow}
+              disabled={checkingForUpdate}
               className="neo-btn mt-3 w-full bg-neo-blue py-3 text-white"
             >
-              {updating ? "Checking…" : "Update now"}
+              {checkingForUpdate ? "Checking…" : "Update now"}
             </button>
-            <p className="mt-3 text-sm text-slate-700">Status: {updateStatus}</p>
+            <p className="mt-3 text-sm text-slate-700">Status: {updateCheckStatus}</p>
             <p className="mt-1 text-xs text-slate-600">
-              Last checked: {lastCheckedAt ? new Date(lastCheckedAt).toLocaleString() : "Never"}
+              Last checked: {lastUpdateCheckedAt ? new Date(lastUpdateCheckedAt).toLocaleString() : "Never"}
             </p>
           </div>
 

@@ -66,6 +66,16 @@ interface UploadProgressState {
   currentFile: string | null;
 }
 
+interface CollectedEntries {
+  files: FileWithPath[];
+  // Every directory encountered during the walk, including ones with no
+  // files directly or indirectly inside them — collected separately from
+  // `files` specifically so empty subfolders survive the upload instead of
+  // silently vanishing (a plain list of files has no way to represent "this
+  // directory exists but is empty").
+  folders: string[];
+}
+
 export default function Vault() {
   const [files, setFiles] = useState<VaultFileEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,6 +88,7 @@ export default function Vault() {
   const [confirmTarget, setConfirmTarget] = useState<VaultFileEntry | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [pendingUpload, setPendingUpload] = useState<FileWithPath[]>([]);
+  const [pendingFolders, setPendingFolders] = useState<string[]>([]);
   const [uploadProgress, setUploadProgress] = useState<UploadProgressState | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
@@ -135,20 +146,43 @@ export default function Vault() {
     };
   }, []);
 
-  async function uploadFiles(fileEntries: FileWithPath[]) {
-    if (fileEntries.length === 0) return;
+  async function uploadFiles(fileEntries: FileWithPath[], folderPaths: string[] = []) {
+    if (fileEntries.length === 0 && folderPaths.length === 0) return;
     setUploading(true);
     setError(null);
     setNotice(null);
-    const totalBytes = fileEntries.reduce((sum, entry) => sum + entry.file.size, 0);
-    setUploadProgress({
-      completedFiles: 0,
-      totalFiles: fileEntries.length,
-      completedBytes: 0,
-      totalBytes,
-      currentFile: fileEntries[0]?.relativePath ?? null,
-    });
+
     try {
+      // Folders first, shallowest first. The backend would create missing
+      // ancestors for any file automatically either way, but doing this
+      // explicitly is what makes an entirely-empty subfolder (or a branch
+      // that's empty at every level) actually survive the upload instead of
+      // silently vanishing — a plain list of files has no way to represent
+      // "this directory exists but has nothing in it."
+      const sortedFolders = [...folderPaths].sort((a, b) => a.split("/").length - b.split("/").length);
+      for (const folderPath of sortedFolders) {
+        await createFolder(folderPath);
+      }
+
+      if (fileEntries.length === 0) {
+        if (folderPaths.length > 0) {
+          setNotice(`Created ${folderPaths.length} folder${folderPaths.length === 1 ? "" : "s"}.`);
+        }
+        setPendingUpload([]);
+        setPendingFolders([]);
+        await refresh();
+        return;
+      }
+
+      const totalBytes = fileEntries.reduce((sum, entry) => sum + entry.file.size, 0);
+      setUploadProgress({
+        completedFiles: 0,
+        totalFiles: fileEntries.length,
+        completedBytes: 0,
+        totalBytes,
+        currentFile: fileEntries[0]?.relativePath ?? null,
+      });
+
       const renamed: string[] = [];
       let completedBytes = 0;
       for (const [index, { file, relativePath }] of fileEntries.entries()) {
@@ -189,6 +223,7 @@ export default function Vault() {
         setNotice(`Renamed to avoid overwriting existing files: ${renamed.join(", ")}`);
       }
       setPendingUpload([]);
+      setPendingFolders([]);
       await refresh();
     } catch (err) {
       setError(getErrorMessage(err, "Upload failed."));
@@ -218,52 +253,64 @@ export default function Vault() {
     });
   }
 
-  async function collectEntryFiles(entry: WebkitFileSystemEntry): Promise<FileWithPath[]> {
+  async function collectEntryFiles(entry: WebkitFileSystemEntry): Promise<CollectedEntries> {
     if (entry.isFile) {
       const file = await fileFromEntry(entry as WebkitFileSystemFileEntry);
       const relativePath = entry.fullPath.replace(/^\//, "") || file.name;
-      return [{ file, relativePath }];
+      return { files: [{ file, relativePath }], folders: [] };
     }
     if (!entry.isDirectory) {
-      return [];
+      return { files: [], folders: [] };
     }
 
     const dir = entry as WebkitFileSystemDirectoryEntry;
+    // Record this directory itself — not just its contents — so it's
+    // preserved even if it (or every branch under it) turns out to be empty.
+    const folderPath = entry.fullPath.replace(/^\//, "") || entry.name;
     const reader = dir.createReader();
-    const all: FileWithPath[] = [];
+    const files: FileWithPath[] = [];
+    const folders: string[] = [folderPath];
 
     // Chrome-style directory reader returns in chunks; keep reading until empty.
     while (true) {
       const batch = await readDirectoryEntries(reader);
       if (batch.length === 0) break;
       for (const child of batch) {
-        const childFiles = await collectEntryFiles(child);
-        all.push(...childFiles);
+        const collected = await collectEntryFiles(child);
+        files.push(...collected.files);
+        folders.push(...collected.folders);
       }
     }
 
-    return all;
+    return { files, folders };
   }
 
-  async function filesFromDrop(event: React.DragEvent<HTMLDivElement>): Promise<FileWithPath[]> {
+  async function filesFromDrop(event: React.DragEvent<HTMLDivElement>): Promise<CollectedEntries> {
     const items = Array.from(event.dataTransfer.items || []);
     const hasEntryApi = items.some((item) => typeof (item as DataTransferItemWithEntry).webkitGetAsEntry === "function");
 
     if (hasEntryApi) {
-      const all: FileWithPath[] = [];
+      const files: FileWithPath[] = [];
+      const folders: string[] = [];
       for (const item of items) {
         if (item.kind !== "file") continue;
         const entry = (item as DataTransferItemWithEntry).webkitGetAsEntry?.();
         if (!entry) continue;
-        const entryFiles = await collectEntryFiles(entry);
-        all.push(...entryFiles);
+        const collected = await collectEntryFiles(entry);
+        files.push(...collected.files);
+        folders.push(...collected.folders);
       }
-      if (all.length > 0) {
-        return all;
+      if (files.length > 0 || folders.length > 0) {
+        return { files, folders };
       }
     }
 
-    return filesFromFileList(event.dataTransfer.files);
+    // Plain (non-drag) file inputs, including the "webkitdirectory" folder
+    // picker, only ever expose files — the browser gives no way to see an
+    // empty directory through that API, so folders stays empty here. Any
+    // non-empty folder is still fully reconstructed from the files' own
+    // paths (the backend creates ancestor directories automatically).
+    return { files: filesFromFileList(event.dataTransfer.files), folders: [] };
   }
 
   async function handleFilesChosen(fileList: FileList | null) {
@@ -275,6 +322,7 @@ export default function Vault() {
     setError(null);
     setNotice(null);
     setPendingUpload(entries);
+    setPendingFolders([]);
   }
 
   async function handleDrop(event: React.DragEvent<HTMLDivElement>) {
@@ -283,24 +331,26 @@ export default function Vault() {
     dragCounter.current = 0;
     setDragActive(false);
 
-    const entries = await filesFromDrop(event);
-    if (entries.length === 0) {
+    const { files, folders } = await filesFromDrop(event);
+    if (files.length === 0 && folders.length === 0) {
       setNotice("No files found in drop payload.");
       return;
     }
 
     setError(null);
     setNotice(null);
-    setPendingUpload(entries);
+    setPendingUpload(files);
+    setPendingFolders(folders);
   }
 
   async function confirmPendingUpload() {
-    await uploadFiles(pendingUpload);
+    await uploadFiles(pendingUpload, pendingFolders);
   }
 
   function cancelPendingUpload() {
     if (uploading) return;
     setPendingUpload([]);
+    setPendingFolders([]);
     setNotice("Upload canceled.");
   }
 
@@ -463,7 +513,7 @@ export default function Vault() {
 
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <NewMenu
-          disabled={uploading || pendingUpload.length > 0}
+          disabled={uploading || pendingUpload.length > 0 || pendingFolders.length > 0}
           onUploadFiles={() => inputRef.current?.click()}
           onUploadFolder={() => folderInputRef.current?.click()}
           onCreateFolder={() => setCreateOpen(true)}
@@ -551,9 +601,11 @@ export default function Vault() {
         </div>
       )}
 
-      {pendingUpload.length > 0 && !uploading && (
+      {(pendingUpload.length > 0 || pendingFolders.length > 0) && !uploading && (
         <UploadPreviewPanel
-          paths={pendingUpload.map((item) => item.relativePath)}
+          filePaths={pendingUpload.map((item) => item.relativePath)}
+          folderPaths={pendingFolders}
+          totalBytes={pendingUpload.reduce((sum, item) => sum + item.file.size, 0)}
           uploading={uploading}
           onCancel={cancelPendingUpload}
           onConfirm={confirmPendingUpload}

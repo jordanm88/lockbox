@@ -5,10 +5,19 @@ import Vault from "./pages/Vault";
 import AppStore from "./pages/AppStore";
 import CloudSync from "./pages/CloudSync";
 import Settings from "./pages/Settings";
+import ConfirmDialog from "./components/ConfirmDialog";
 import { lockVault, unlockVault } from "./lib/vaultBridge";
 import { loadCloudConfig, syncVaultNow } from "./lib/cloudSyncBridge";
+import { applyPortableUpdate, checkPortableUpdate, PortableUpdateInfo } from "./lib/updateBridge";
 import { getErrorMessage } from "./lib/errors";
 import { AUTO_LOCK_MINUTES, AUTO_LOCK_OPTIONS, AutoLockOption, TabId } from "./types";
+
+// How often to re-check for updates in the background while the app stays
+// open and unlocked. "Later" on the update prompt doesn't set its own timer
+// — it just dismisses the prompt, and this interval (plus the immediate
+// check on every unlock) is what re-surfaces it "at the next scheduled
+// time," per the existing update-check design.
+const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 function readStoredBoolean(key: string): boolean {
   try {
@@ -54,6 +63,18 @@ export default function App() {
     setAutoLockOptionState(next);
     try {
       localStorage.setItem("autoLockOption", next);
+    } catch {}
+  }
+
+  const [autoUpdateEnabled, setAutoUpdateEnabledState] = useState(() => readStoredBoolean("autoUpdateEnabled"));
+  const [updateAvailable, setUpdateAvailable] = useState<PortableUpdateInfo | null>(null);
+  const [applyingUpdate, setApplyingUpdate] = useState(false);
+  const [updatePromptError, setUpdatePromptError] = useState<string | null>(null);
+
+  function setAutoUpdateEnabled(next: boolean) {
+    setAutoUpdateEnabledState(next);
+    try {
+      localStorage.setItem("autoUpdateEnabled", next ? "true" : "false");
     } catch {}
   }
 
@@ -150,6 +171,55 @@ export default function App() {
     };
   }, [unlocked, autoLockOption]);
 
+  // Background update checks: immediately on unlock, then on a recurring
+  // schedule. Lives here (not Settings) so the schedule keeps running
+  // regardless of which tab is open, same reasoning as auto-sync/auto-lock.
+  // Never applies automatically — finding an update just opens the
+  // Now/Later prompt below; "Later" relies on this same effect firing again
+  // to re-prompt rather than setting up any dismissal-specific timer.
+  useEffect(() => {
+    if (!unlocked || !autoUpdateEnabled) return;
+
+    let cancelled = false;
+    async function runBackgroundCheck() {
+      try {
+        const info = await checkPortableUpdate();
+        if (!cancelled && info.hasUpdate && info.assetDownloadUrl) {
+          setUpdateAvailable(info);
+        }
+      } catch {
+        // Silent in the background — Settings' manual "Update now" button
+        // surfaces the same error directly if the user checks by hand.
+      }
+    }
+
+    runBackgroundCheck();
+    const timer = setInterval(runBackgroundCheck, UPDATE_CHECK_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [unlocked, autoUpdateEnabled]);
+
+  async function handleUpdateNow() {
+    if (!updateAvailable?.assetDownloadUrl) return;
+    setApplyingUpdate(true);
+    setUpdatePromptError(null);
+    try {
+      await applyPortableUpdate(updateAvailable.assetDownloadUrl);
+      // App closes and restarts itself from here — nothing more to do.
+    } catch (err) {
+      setUpdatePromptError(getErrorMessage(err, "Update failed."));
+      setApplyingUpdate(false);
+    }
+  }
+
+  function handleUpdateLater() {
+    setUpdateAvailable(null);
+    setUpdatePromptError(null);
+  }
+
   if (!unlocked) {
     return <LockScreen onUnlock={handleUnlock} />;
   }
@@ -175,10 +245,32 @@ export default function App() {
             />
           )}
           {activeTab === "settings" && (
-            <Settings onLock={handleLock} autoLockOption={autoLockOption} onChangeAutoLockOption={setAutoLockOption} />
+            <Settings
+              onLock={handleLock}
+              autoLockOption={autoLockOption}
+              onChangeAutoLockOption={setAutoLockOption}
+              autoUpdateEnabled={autoUpdateEnabled}
+              onChangeAutoUpdateEnabled={setAutoUpdateEnabled}
+            />
           )}
         </div>
       </main>
+
+      <ConfirmDialog
+        open={updateAvailable !== null}
+        title={updateAvailable ? `Update available: v${updateAvailable.latestVersion}` : "Update available"}
+        description={
+          updatePromptError
+            ? `Update failed: ${updatePromptError}`
+            : applyingUpdate
+              ? "Downloading update…"
+              : `You're on v${updateAvailable?.currentVersion}. Update now, or choose Later and Lockbox will ask again next time it checks.`
+        }
+        confirmLabel={applyingUpdate ? "Updating…" : "Update Now"}
+        cancelLabel="Later"
+        onConfirm={handleUpdateNow}
+        onCancel={handleUpdateLater}
+      />
     </div>
   );
 }

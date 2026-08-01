@@ -42,6 +42,13 @@ struct TestFinished {
     code: Option<i32>,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RestoreFinished {
+    success: bool,
+    code: Option<i32>,
+}
+
 /// Runs `rclone sync <Vault dir> <remote>:<path>` for the given config,
 /// streaming stdout/stderr back to the frontend as `rclone-output` events
 /// line-by-line as they arrive, and emitting `rclone-sync-finished` once the
@@ -148,6 +155,84 @@ pub async fn run_rclone_sync(
             success: status.success(),
             code: status.code(),
             skipped: false,
+        },
+    );
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("rclone exited with status {status}"))
+    }
+}
+
+/// Runs `rclone copy <remote>:<path> <Vault dir>` — the reverse direction of
+/// `run_rclone_sync` — to restore a vault from its cloud backup. Deliberately
+/// `copy`, not `sync`: `sync` would delete anything in the vault that isn't
+/// also on the remote, which is exactly the kind of surprise data loss a
+/// "restore my backup" action must never cause. `copy` only ever adds or
+/// overwrites files that exist on the remote, leaving anything local-only
+/// untouched.
+pub async fn run_rclone_restore(
+    app_handle: AppHandle,
+    root: PathBuf,
+    config: CloudRemoteConfig,
+) -> Result<(), String> {
+    let rclone_path = resolve_rclone_binary(&root)?;
+
+    let vault_dir = usb_root::vault_dir(&root);
+    let env_vars = {
+        let rclone_path = rclone_path.clone();
+        let config = config.clone();
+        tokio::task::spawn_blocking(move || build_remote_env(&rclone_path, REMOTE_NAME, &config))
+            .await
+            .map_err(|e| format!("internal error preparing rclone config: {e}"))??
+    };
+
+    let target = remote_target(REMOTE_NAME, &config);
+    let null_config_path = "NUL";
+
+    let mut command = tokio::process::Command::new(&rclone_path);
+    command
+        .arg("copy")
+        .arg(&target)
+        .arg(&vault_dir)
+        .arg("--progress")
+        .arg("--config")
+        .arg(null_config_path)
+        .envs(env_vars)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let mut child = command
+        .spawn()
+        .map_err(|e| format!("failed to start rclone: {e}"))?;
+
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or("failed to capture rclone stdout")?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or("failed to capture rclone stderr")?;
+
+    let stdout_task = tokio::spawn(stream_lines(app_handle.clone(), stdout, "stdout"));
+    let stderr_task = tokio::spawn(stream_lines(app_handle.clone(), stderr, "stderr"));
+
+    let status = child
+        .wait()
+        .await
+        .map_err(|e| format!("rclone process error: {e}"))?;
+
+    let _ = stdout_task.await;
+    let _ = stderr_task.await;
+
+    let _ = app_handle.emit(
+        "rclone-restore-finished",
+        RestoreFinished {
+            success: status.success(),
+            code: status.code(),
         },
     );
 

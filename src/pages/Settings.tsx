@@ -1,6 +1,5 @@
 import { useState } from "react";
 import PageHeader from "../components/PageHeader";
-import { useEffect } from "react";
 import { applyPortableUpdate, checkPortableUpdate } from "../lib/updateBridge";
 import { getErrorMessage } from "../lib/errors";
 import { AUTO_LOCK_OPTIONS, AutoLockOption } from "../types";
@@ -10,19 +9,20 @@ interface SettingsProps {
   onLock: () => void;
   autoLockOption: AutoLockOption;
   onChangeAutoLockOption: (option: AutoLockOption) => void;
+  autoUpdateEnabled: boolean;
+  onChangeAutoUpdateEnabled: (enabled: boolean) => void;
 }
 
-export default function Settings({ onLock, autoLockOption, onChangeAutoLockOption }: SettingsProps) {
+export default function Settings({
+  onLock,
+  autoLockOption,
+  onChangeAutoLockOption,
+  autoUpdateEnabled,
+  onChangeAutoUpdateEnabled,
+}: SettingsProps) {
   const [currentPass, setCurrentPass] = useState("");
   const [newPass, setNewPass] = useState("");
   const [confirmPass, setConfirmPass] = useState("");
-  const [autoUpdate, setAutoUpdate] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem("autoUpdateEnabled") === "true";
-    } catch {
-      return false;
-    }
-  });
   const [updateStatus, setUpdateStatus] = useState<string>("Idle");
   const [updating, setUpdating] = useState(false);
   const [lastCheckedAt, setLastCheckedAt] = useState<string | null>(() => {
@@ -70,11 +70,6 @@ export default function Settings({ onLock, autoLockOption, onChangeAutoLockOptio
       setUpdating(false);
     }
   }
-
-  useEffect(() => {
-    if (!autoUpdate) return;
-    runPortableUpdateCheck();
-  }, [autoUpdate]);
 
   return (
     <div>
@@ -144,23 +139,20 @@ export default function Settings({ onLock, autoLockOption, onChangeAutoLockOptio
             <div className="flex items-center justify-between gap-4">
               <div>
                 <div className="font-semibold text-ink">Auto-check for updates</div>
-                <div className="text-sm text-slate-600">When enabled, Lockbox checks GitHub releases and applies portable Windows EXE updates automatically.</div>
+                <div className="text-sm text-slate-600">
+                  When enabled, Lockbox checks GitHub releases in the background and asks before
+                  installing anything — choosing "Later" just asks again at the next check.
+                </div>
               </div>
               <button
                 type="button"
                 role="switch"
-                aria-checked={autoUpdate}
-                onClick={() => {
-                  const next = !autoUpdate;
-                  setAutoUpdate(next);
-                  try {
-                    localStorage.setItem("autoUpdateEnabled", next ? "true" : "false");
-                  } catch {}
-                }}
-                className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${autoUpdate ? "bg-blue-600" : "bg-slate-200"}`}
+                aria-checked={autoUpdateEnabled}
+                onClick={() => onChangeAutoUpdateEnabled(!autoUpdateEnabled)}
+                className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${autoUpdateEnabled ? "bg-blue-600" : "bg-slate-200"}`}
               >
                 <span
-                  className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${autoUpdate ? "translate-x-6" : "translate-x-1"}`}
+                  className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${autoUpdateEnabled ? "translate-x-6" : "translate-x-1"}`}
                 />
               </button>
             </div>

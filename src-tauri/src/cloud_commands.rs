@@ -79,3 +79,43 @@ async fn sync_vault_now_inner(app_handle: &AppHandle, state: &State<'_, AppState
 
     rclone::run_rclone_sync(app_handle.clone(), root, config).await
 }
+
+/// Pulls the cloud backup back down into the vault (`rclone copy`, not
+/// `sync` — see `rclone::run_rclone_restore` for why). Shares the same
+/// `sync_in_progress` guard as `sync_vault_now` so a restore and a sync
+/// can't run against the vault at the same time.
+#[tauri::command]
+pub async fn restore_vault_from_cloud(
+    app_handle: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    {
+        let mut in_progress = lock_recover(&state.sync_in_progress);
+        if *in_progress {
+            return Err("a sync/restore operation is already running".to_string());
+        }
+        *in_progress = true;
+    }
+
+    let result = restore_vault_from_cloud_inner(&app_handle, &state).await;
+
+    *lock_recover(&state.sync_in_progress) = false;
+
+    result
+}
+
+async fn restore_vault_from_cloud_inner(
+    app_handle: &AppHandle,
+    state: &State<'_, AppState>,
+) -> Result<(), String> {
+    let root = state.root.clone();
+
+    let config = {
+        let guard = lock_recover(&state.vault_key);
+        let key = guard.as_ref().ok_or("vault is locked")?;
+        let vault_dir = usb_root::vault_dir(&root);
+        cloud_config::load(&vault_dir, key)?.ok_or("no cloud remote configured yet")?
+    };
+
+    rclone::run_rclone_restore(app_handle.clone(), root, config).await
+}

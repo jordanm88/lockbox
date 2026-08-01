@@ -743,22 +743,7 @@ pub fn export_vault_folder(
             .strip_prefix(&prefix)
             .unwrap_or(entry.original_path.as_str());
         let out_path = dest_root.join(relative_to_folder);
-
-        if let Some(parent) = out_path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("failed to create directory: {e}"))?;
-        }
-
-        let blob_name = entry
-            .blob_name
-            .as_ref()
-            .ok_or("missing blob mapping for file")?;
-        let sealed = fs::read(data_dir.join(blob_name))
-            .map_err(|e| format!("failed to read encrypted file: {e}"))?;
-        let plaintext = crypto::decrypt_bytes(key, &sealed)?;
-
-        fs::write(&out_path, plaintext)
-            .map_err(|e| format!("failed to write {}: {e}", out_path.display()))?;
+        write_decrypted_entry(entry, &data_dir, key, &out_path)?;
         exported += 1;
     }
 
@@ -767,6 +752,82 @@ pub fn export_vault_folder(
     }
 
     Ok(exported)
+}
+
+/// Exports a mixed batch of files and/or folders (as selected via multi-select
+/// in the vault browser) into `destination_dir` in one go, each under its own
+/// basename — e.g. selecting a "Photos" folder and a "notes.txt" file
+/// produces `destination_dir/Photos/...` and `destination_dir/notes.txt`,
+/// matching how dragging multiple items into a folder normally behaves.
+///
+/// `async`: see `export_vault_folder` above — this can be an even larger
+/// batch of decrypt+write work.
+#[tauri::command(async)]
+pub fn export_vault_items(
+    state: State<AppState>,
+    relative_paths: Vec<String>,
+    destination_dir: String,
+) -> Result<u32, String> {
+    let guard = lock_recover(&state.vault_key);
+    let key = guard.as_ref().ok_or("vault is locked")?;
+
+    let vault_dir = usb_root::vault_dir(&state.root);
+    let index = load_or_upgrade_index(&vault_dir, key)?;
+    let data_dir = ensure_data_dir(&vault_dir)?;
+    let dest_root = PathBuf::from(&destination_dir);
+
+    let mut exported = 0u32;
+    for relative_path in &relative_paths {
+        let normalized = normalize_relative_path(relative_path)?;
+        let basename = normalized.rsplit('/').next().unwrap_or(&normalized);
+        let entry = get_entry_for_path(&index, &normalized)
+            .ok_or_else(|| format!("'{normalized}' not found in vault"))?;
+
+        if entry.is_dir {
+            let prefix = format!("{normalized}/");
+            for candidate in &index.entries {
+                if candidate.is_dir || !candidate.original_path.starts_with(&prefix) {
+                    continue;
+                }
+                let relative_to_folder = candidate
+                    .original_path
+                    .strip_prefix(&prefix)
+                    .unwrap_or(candidate.original_path.as_str());
+                let out_path = dest_root.join(basename).join(relative_to_folder);
+                write_decrypted_entry(candidate, &data_dir, key, &out_path)?;
+                exported += 1;
+            }
+        } else {
+            let out_path = dest_root.join(basename);
+            write_decrypted_entry(entry, &data_dir, key, &out_path)?;
+            exported += 1;
+        }
+    }
+
+    if exported == 0 {
+        return Err("no files found to export".to_string());
+    }
+
+    Ok(exported)
+}
+
+fn write_decrypted_entry(
+    entry: &VaultIndexEntry,
+    data_dir: &Path,
+    key: &crypto::VaultKey,
+    out_path: &Path,
+) -> Result<(), String> {
+    if let Some(parent) = out_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("failed to create directory: {e}"))?;
+    }
+    let blob_name = entry
+        .blob_name
+        .as_ref()
+        .ok_or("missing blob mapping for file")?;
+    let sealed = fs::read(data_dir.join(blob_name))
+        .map_err(|e| format!("failed to read encrypted file: {e}"))?;
+    let plaintext = crypto::decrypt_bytes(key, &sealed)?;
+    fs::write(out_path, plaintext).map_err(|e| format!("failed to write {}: {e}", out_path.display()))
 }
 
 // `async`: `remove_dir_all` on a large installed app (hundreds of MB, many

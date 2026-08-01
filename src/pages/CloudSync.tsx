@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import PageHeader from "../components/PageHeader";
+import ConfirmDialog from "../components/ConfirmDialog";
 import { getErrorMessage } from "../lib/errors";
 import {
   CloudRemoteConfig,
   RcloneOutputLine,
   loadCloudConfig,
   onRcloneOutput,
+  onRestoreFinished,
   onSyncFinished,
   onTestFinished,
+  restoreVaultFromCloud,
   saveCloudConfig,
   syncVaultNow,
   testCloudConnection,
@@ -15,6 +18,7 @@ import {
 
 type Provider = CloudRemoteConfig["provider"];
 type SyncStatus = "idle" | "running" | "success" | "skipped" | "failed";
+type RestoreStatus = "idle" | "running" | "success" | "failed";
 
 interface CloudSyncProps {
   autoSyncEnabled: boolean;
@@ -113,8 +117,10 @@ export default function CloudSync({
   const [error, setError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<"idle" | "ok" | "failed">("idle");
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
+  const [restoreStatus, setRestoreStatus] = useState<RestoreStatus>("idle");
+  const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false);
   const [output, setOutput] = useState<string[]>([]);
-  const [lastAction, setLastAction] = useState<"sync" | "test" | null>(null);
+  const [lastAction, setLastAction] = useState<"sync" | "test" | "restore" | null>(null);
   const [lastErrorDetail, setLastErrorDetail] = useState<string | null>(null);
   const outputRef = useRef<HTMLDivElement>(null);
 
@@ -136,11 +142,15 @@ export default function CloudSync({
       setTesting(false);
       setTestResult(result.success ? "ok" : "failed");
     });
+    const restoreFinishedUnlisten = onRestoreFinished((result) => {
+      setRestoreStatus(result.success ? "success" : "failed");
+    });
 
     return () => {
       outputUnlisten.then((unlisten) => unlisten());
       finishedUnlisten.then((unlisten) => unlisten());
       testFinishedUnlisten.then((unlisten) => unlisten());
+      restoreFinishedUnlisten.then((unlisten) => unlisten());
     };
   }, []);
 
@@ -209,6 +219,28 @@ export default function CloudSync({
     }
   }
 
+  function requestRestore() {
+    setRestoreConfirmOpen(true);
+  }
+
+  async function handleRestore() {
+    setRestoreConfirmOpen(false);
+    setLastAction("restore");
+    setRestoreStatus("running");
+    setOutput([]);
+    setError(null);
+    setLastErrorDetail(null);
+    try {
+      await restoreVaultFromCloud();
+      setRestoreStatus("success");
+    } catch (err) {
+      setRestoreStatus("failed");
+      const message = getErrorMessage(err, "Restore failed.");
+      setError(message);
+      setLastErrorDetail(message);
+    }
+  }
+
   async function retryLastAction() {
     if (lastAction === "sync") {
       await handleSync();
@@ -216,11 +248,16 @@ export default function CloudSync({
     }
     if (lastAction === "test") {
       await handleTestConnection();
+      return;
+    }
+    if (lastAction === "restore") {
+      await handleRestore();
     }
   }
 
   const isRunning = syncStatus === "running";
-  const busy = isRunning || testing || saving || loading;
+  const isRestoring = restoreStatus === "running";
+  const busy = isRunning || isRestoring || testing || saving || loading;
 
   return (
     <div>
@@ -333,7 +370,7 @@ export default function CloudSync({
                   <p className="text-sm font-semibold text-red-700">Last error: {lastErrorDetail}</p>
                   {lastAction && (
                     <button type="button" onClick={retryLastAction} disabled={busy} className="neo-btn mt-2 bg-neo-red px-3 py-2 text-white">
-                      Retry {lastAction === "sync" ? "sync" : "connection test"}
+                      Retry {lastAction === "sync" ? "sync" : lastAction === "restore" ? "restore" : "connection test"}
                     </button>
                   )}
                 </div>
@@ -358,10 +395,36 @@ export default function CloudSync({
             type="button"
             onClick={handleSync}
             disabled={busy}
-            className="neo-btn mb-4 bg-neo-blue py-3 text-white"
+            className="neo-btn mb-3 bg-neo-blue py-3 text-white"
           >
             {isRunning ? "Syncing…" : "🔄 Sync Vault Now"}
           </button>
+
+          <button
+            type="button"
+            onClick={requestRestore}
+            disabled={busy}
+            className="neo-btn mb-2 bg-white py-3 text-slate-700"
+          >
+            {isRestoring ? "Restoring…" : "⬇ Restore from Backup"}
+          </button>
+          {restoreStatus !== "idle" && (
+            <p
+              className={`mb-4 text-xs font-medium ${restoreStatus === "success" ? "text-emerald-700" : restoreStatus === "failed" ? "text-red-700" : "text-slate-500"}`}
+            >
+              {restoreStatus === "running"
+                ? "Pulling files down from the remote…"
+                : restoreStatus === "success"
+                  ? "✓ Restore complete. Files from the backup that were missing or newer locally have been copied in."
+                  : "✗ Restore failed — see the error below."}
+            </p>
+          )}
+          {restoreStatus === "idle" && (
+            <p className="mb-4 text-xs text-slate-500">
+              Copies files from the remote backup into the vault. Never deletes anything local —
+              safe to use on a fresh drive or after local data loss.
+            </p>
+          )}
 
           <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4">
             <div className="flex items-center justify-between gap-4">
@@ -420,7 +483,7 @@ export default function CloudSync({
             )}
           </div>
 
-          {output.length > 0 && (syncStatus === "failed" || testResult === "failed") && (
+          {output.length > 0 && (syncStatus === "failed" || testResult === "failed" || restoreStatus === "failed") && (
             <div className="neo-card mt-3 bg-white p-3">
               <p className="mb-2 text-sm font-semibold text-slate-700">Recent output details</p>
               <pre className="max-h-36 overflow-auto whitespace-pre-wrap text-xs text-slate-700">
@@ -430,6 +493,16 @@ export default function CloudSync({
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={restoreConfirmOpen}
+        title="Restore from backup?"
+        description="This copies every file from the remote backup into the vault, overwriting any local file that shares the same name and path with the remote's version. Local-only files are left untouched — nothing is deleted."
+        confirmLabel="Restore"
+        cancelLabel="Cancel"
+        onConfirm={handleRestore}
+        onCancel={() => setRestoreConfirmOpen(false)}
+      />
     </div>
   );
 }

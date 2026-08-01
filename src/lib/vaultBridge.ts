@@ -138,6 +138,17 @@ export async function exportVaultFolder(relativePath: string): Promise<number | 
   return invoke<number>("export_vault_folder", { relativePath, destinationDir });
 }
 
+/**
+ * Prompts once for a destination folder, then exports every selected file
+ * and/or folder into it (each under its own name), for multi-select export.
+ * Returns the number of files exported, or null if the user cancels.
+ */
+export async function exportVaultItems(relativePaths: string[]): Promise<number | null> {
+  const destinationDir = await open({ directory: true });
+  if (!destinationDir || Array.isArray(destinationDir)) return null;
+  return invoke<number>("export_vault_items", { relativePaths, destinationDir });
+}
+
 export interface EjectResult {
   cleanedUp: string[];
   message: string;

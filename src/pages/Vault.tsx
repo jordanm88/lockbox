@@ -13,6 +13,7 @@ import {
   deleteVaultEntry,
   exportVaultFile,
   exportVaultFolder,
+  exportVaultItems,
 } from "../lib/vaultBridge";
 import { mimeTypeFor } from "../lib/mime";
 import { getErrorMessage } from "../lib/errors";
@@ -79,6 +80,8 @@ export default function Vault() {
   const [pendingUpload, setPendingUpload] = useState<FileWithPath[]>([]);
   const [uploadProgress, setUploadProgress] = useState<UploadProgressState | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
@@ -336,6 +339,87 @@ export default function Vault() {
     }
   }
 
+  function toggleSelect(fullPath: string) {
+    setSelectedPaths((current) => {
+      const next = new Set(current);
+      if (next.has(fullPath)) {
+        next.delete(fullPath);
+      } else {
+        next.add(fullPath);
+      }
+      return next;
+    });
+  }
+
+  function setSelection(paths: string[]) {
+    setSelectedPaths(new Set(paths));
+  }
+
+  // If a folder and one of its own descendants are both selected, only keep
+  // the folder — exporting/deleting it already covers everything inside,
+  // and issuing a second, redundant call for the descendant would either
+  // double up the work or fail outright (e.g. delete on an already-deleted
+  // child) depending on call order.
+  function topLevelSelection(): string[] {
+    const paths = Array.from(selectedPaths);
+    return paths.filter((path) => !paths.some((other) => other !== path && path.startsWith(`${other}/`)));
+  }
+
+  async function handleBulkExport() {
+    const paths = topLevelSelection();
+    if (paths.length === 0) return;
+    setUploading(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const count = await exportVaultItems(paths);
+      if (count !== null) {
+        setNotice(`Exported ${count} file${count === 1 ? "" : "s"}.`);
+        setSelectedPaths(new Set());
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, "Failed to export selected items."));
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function requestBulkDelete() {
+    if (selectedPaths.size === 0) return;
+    setBulkDeleteConfirmOpen(true);
+  }
+
+  async function confirmBulkDelete() {
+    setBulkDeleteConfirmOpen(false);
+    setUploading(true);
+    const paths = topLevelSelection();
+    setError(null);
+    setNotice(null);
+    try {
+      for (const path of paths) {
+        await deleteVaultEntry(path);
+      }
+      setFiles((current) =>
+        current.filter((entry) => !paths.some((path) => entry.name === path || entry.name.startsWith(`${path}/`))),
+      );
+      if (preview && paths.some((path) => preview.name === path || preview.name.startsWith(`${path}/`))) {
+        closePreview();
+      }
+      setNotice(`Deleted ${paths.length} item${paths.length === 1 ? "" : "s"}.`);
+      setSelectedPaths(new Set());
+      await refresh();
+    } catch (err) {
+      setError(getErrorMessage(err, "Failed to delete selected items."));
+      await refresh();
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function cancelBulkDelete() {
+    setBulkDeleteConfirmOpen(false);
+  }
+
   function requestDelete(entry: VaultFileEntry) {
     setConfirmTarget(entry);
     setConfirmOpen(true);
@@ -444,6 +528,11 @@ export default function Vault() {
           onView={handleView}
           onDelete={requestDelete}
           onExport={handleExport}
+          selectedPaths={selectedPaths}
+          onToggleSelect={toggleSelect}
+          onSetSelection={setSelection}
+          onBulkExport={handleBulkExport}
+          onBulkDelete={requestBulkDelete}
         />
       )}
 
@@ -510,6 +599,16 @@ export default function Vault() {
         cancelLabel="Cancel"
         onConfirm={confirmDelete}
         onCancel={cancelDelete}
+      />
+
+      <ConfirmDialog
+        open={bulkDeleteConfirmOpen}
+        title={`Delete ${topLevelSelection().length} item${topLevelSelection().length === 1 ? "" : "s"}?`}
+        description="This action will permanently remove the selected files and folders from the vault."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={confirmBulkDelete}
+        onCancel={cancelBulkDelete}
       />
     </div>
   );

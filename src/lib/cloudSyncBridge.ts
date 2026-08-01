@@ -44,6 +44,11 @@ export interface TestFinished {
   code: number | null;
 }
 
+export interface RestoreFinished {
+  success: boolean;
+  code: number | null;
+}
+
 export function saveCloudConfig(config: CloudRemoteConfig): Promise<void> {
   return invoke<void>("save_cloud_config", { config });
 }
@@ -56,6 +61,15 @@ export function syncVaultNow(): Promise<void> {
   return invoke<void>("sync_vault_now");
 }
 
+/**
+ * Pulls the cloud backup back down into the vault (`rclone copy`, additive
+ * only — never deletes local-only files). Use when restoring onto a fresh
+ * drive or recovering from local data loss.
+ */
+export function restoreVaultFromCloud(): Promise<void> {
+  return invoke<void>("restore_vault_from_cloud");
+}
+
 export function testCloudConnection(config: CloudRemoteConfig): Promise<void> {
   return invoke<void>("test_cloud_connection", { config });
 }
@@ -66,6 +80,10 @@ export function onRcloneOutput(handler: (line: RcloneOutputLine) => void): Promi
 
 export function onSyncFinished(handler: (result: SyncFinished) => void): Promise<UnlistenFn> {
   return listen<SyncFinished>("rclone-sync-finished", (event) => handler(event.payload));
+}
+
+export function onRestoreFinished(handler: (result: RestoreFinished) => void): Promise<UnlistenFn> {
+  return listen<RestoreFinished>("rclone-restore-finished", (event) => handler(event.payload));
 }
 
 export function onTestFinished(handler: (result: TestFinished) => void): Promise<UnlistenFn> {

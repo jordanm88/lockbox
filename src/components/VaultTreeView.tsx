@@ -8,6 +8,11 @@ interface Props {
   onView: (entry: VaultFileEntry) => void;
   onDelete: (entry: VaultFileEntry) => void;
   onExport: (entry: VaultFileEntry) => void;
+  selectedPaths: Set<string>;
+  onToggleSelect: (fullPath: string) => void;
+  onSetSelection: (paths: string[]) => void;
+  onBulkExport: () => void;
+  onBulkDelete: () => void;
 }
 
 interface BrowserRow {
@@ -65,7 +70,19 @@ function fileVisual(name: string, isDir: boolean): FileVisual {
   return { icon: "📦", bg: "bg-slate-100", text: "text-slate-500" };
 }
 
-export default function VaultTreeView({ entries, searchQuery = "", onClearSearch, onView, onDelete, onExport }: Props) {
+export default function VaultTreeView({
+  entries,
+  searchQuery = "",
+  onClearSearch,
+  onView,
+  onDelete,
+  onExport,
+  selectedPaths,
+  onToggleSelect,
+  onSetSelection,
+  onBulkExport,
+  onBulkDelete,
+}: Props) {
   const [currentPath, setCurrentPath] = useState("");
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
 
@@ -132,6 +149,13 @@ export default function VaultTreeView({ entries, searchQuery = "", onClearSearch
 
   function formatSize(bytes: number): string {
     return `${Math.max(1, Math.ceil(bytes / 1024))} KB`;
+  }
+
+  const visiblePaths = useMemo(() => rows.map((row) => row.fullPath), [rows]);
+  const allVisibleSelected = visiblePaths.length > 0 && visiblePaths.every((path) => selectedPaths.has(path));
+
+  function toggleSelectAllVisible() {
+    onSetSelection(allVisibleSelected ? [] : visiblePaths);
   }
 
   return (
@@ -203,10 +227,48 @@ export default function VaultTreeView({ entries, searchQuery = "", onClearSearch
           )}
         </div>
 
+        {selectedPaths.size > 0 && (
+          <div className="flex flex-wrap items-center gap-3 border-b border-blue-100 bg-blue-50 px-5 py-3">
+            <p className="text-sm font-semibold text-blue-800">
+              {selectedPaths.size} item{selectedPaths.size === 1 ? "" : "s"} selected
+            </p>
+            <div className="ml-auto flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={onBulkExport}
+                className="rounded-full bg-white px-3.5 py-1.5 text-sm font-medium text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-50"
+              >
+                ⬇ Export selected
+              </button>
+              <button
+                type="button"
+                onClick={onBulkDelete}
+                className="rounded-full bg-white px-3.5 py-1.5 text-sm font-medium text-rose-600 ring-1 ring-rose-200 hover:bg-rose-50"
+              >
+                🗑 Delete selected
+              </button>
+              <button
+                type="button"
+                onClick={() => onSetSelection([])}
+                className="rounded-full px-3.5 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        )}
+
         {viewMode === "list" || isSearching ? (
           <div className="overflow-x-auto">
             <div className="min-w-[720px]">
-              <div className="grid grid-cols-[minmax(0,1fr)_120px_110px_210px] gap-4 border-b border-slate-200 bg-slate-50 px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <div className="grid grid-cols-[28px_minmax(0,1fr)_120px_110px_210px] items-center gap-4 border-b border-slate-200 bg-slate-50 px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={toggleSelectAllVisible}
+                  aria-label="Select all"
+                  className="h-4 w-4 rounded border-slate-300"
+                />
                 <div>Name</div>
                 <div>Type</div>
                 <div className="text-right">Size</div>
@@ -227,9 +289,16 @@ export default function VaultTreeView({ entries, searchQuery = "", onClearSearch
                     return (
                       <div
                         key={row.fullPath}
-                        className="grid grid-cols-[minmax(0,1fr)_120px_110px_210px] items-center gap-4 px-5 py-3 transition hover:bg-slate-50"
+                        className="grid grid-cols-[28px_minmax(0,1fr)_120px_110px_210px] items-center gap-4 px-5 py-3 transition hover:bg-slate-50"
                         style={{ paddingLeft: isSearching ? undefined : `${1.25 + Math.min(row.depth, 4) * 0.25}rem` }}
                       >
+                        <input
+                          type="checkbox"
+                          checked={selectedPaths.has(row.fullPath)}
+                          onChange={() => onToggleSelect(row.fullPath)}
+                          aria-label={`Select ${row.name}`}
+                          className="h-4 w-4 rounded border-slate-300"
+                        />
                         <button
                           type="button"
                           onClick={row.isDir ? () => openFolder(row.fullPath) : () => onView(full)}
@@ -285,7 +354,14 @@ export default function VaultTreeView({ entries, searchQuery = "", onClearSearch
                   const visual = fileVisual(row.name, row.isDir);
 
                   return (
-                    <div key={row.fullPath} className="rounded-2xl border border-slate-200 bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-md">
+                    <div key={row.fullPath} className="relative rounded-2xl border border-slate-200 bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-md">
+                      <input
+                        type="checkbox"
+                        checked={selectedPaths.has(row.fullPath)}
+                        onChange={() => onToggleSelect(row.fullPath)}
+                        aria-label={`Select ${row.name}`}
+                        className="absolute left-3 top-3 h-4 w-4 rounded border-slate-300"
+                      />
                       <button
                         type="button"
                         onClick={row.isDir ? () => openFolder(row.fullPath) : () => onView(full)}

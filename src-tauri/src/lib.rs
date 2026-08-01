@@ -60,6 +60,7 @@ pub fn run() {
             commands::delete_vault_entry,
             commands::export_vault_file,
             commands::export_vault_folder,
+            commands::export_vault_items,
             commands::uninstall_app,
             updates::get_latest_release,
             updates::check_portable_update,
@@ -67,6 +68,7 @@ pub fn run() {
             cloud_commands::save_cloud_config,
             cloud_commands::load_cloud_config,
             cloud_commands::sync_vault_now,
+            cloud_commands::restore_vault_from_cloud,
             cloud_commands::test_cloud_connection,
             eject::eject_usb_drive,
         ])

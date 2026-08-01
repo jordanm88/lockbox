@@ -297,6 +297,69 @@
           "sha256": "84c8a437f8af89257524478489e5c85f1edf25f761d299e2bcde46ac0afbe106"
         }
       }
+    },
+    {
+      "id": "thunderbird",
+      "name": "Mozilla Thunderbird",
+      "description": "Email, calendar, and contacts client from Mozilla.",
+      "icon": "📧",
+      "homepage": "https://www.thunderbird.net/",
+      "category": "Internet",
+      "targets": {
+        "windows": {
+          "url": "https://download.mozilla.org/?product=thunderbird-latest&os=win64&lang=en-US",
+          "archiveType": "installer",
+          "launcher": "thunderbird.exe"
+        }
+      }
+    },
+    {
+      "id": "chromium",
+      "name": "Chromium",
+      "description": "Open-source browser project that Chrome and Edge are built on — no installer, no auto-update, no account required.",
+      "icon": "🌐",
+      "homepage": "https://www.chromium.org/getting-involved/download-chromium/",
+      "category": "Internet",
+      "targets": {
+        "windows": {
+          "url": "https://commondatastorage.googleapis.com/chromium-browser-snapshots/Win_x64/1672308/chrome-win.zip",
+          "archiveType": "zip",
+          "launcher": "chrome-win/chrome.exe",
+          "sha256": "f3a254bf56b4533888a5fbca08dc7b5f973003a487665b3e812784e4c8e844c6"
+        }
+      }
+    },
+    {
+      "id": "shadowsocks",
+      "name": "Shadowsocks",
+      "description": "Portable SOCKS5 proxy client — no driver or admin rights required, unlike a full VPN. Requires your own Shadowsocks server to connect to; routes only apps/traffic pointed at the proxy, not the whole system.",
+      "icon": "🧦",
+      "homepage": "https://github.com/shadowsocks/shadowsocks-windows",
+      "category": "Internet",
+      "targets": {
+        "windows": {
+          "url": "https://github.com/shadowsocks/shadowsocks-windows/releases/download/4.4.1.0/Shadowsocks-4.4.1.0.zip",
+          "archiveType": "zip",
+          "launcher": "Shadowsocks.exe",
+          "sha256": "62b74a688d22bfdf20f673a351580029d7b9de67c6facc9a5613b22b3f798968"
+        }
+      }
+    },
+    {
+      "id": "microsip",
+      "name": "MicroSIP",
+      "description": "Lightweight SIP softphone for making calls over a VoIP/SIP account.",
+      "icon": "☎️",
+      "homepage": "https://www.microsip.org/",
+      "category": "Internet",
+      "targets": {
+        "windows": {
+          "url": "https://www.microsip.org/download/MicroSIP-3.22.12.zip",
+          "archiveType": "zip",
+          "launcher": "MicroSIP.exe",
+          "sha256": "59738ca40c217a87da43a57ff891cc1d5c45c16ee62f578b2ccab05bca9b2362"
+        }
+      }
     }
   ]
 }

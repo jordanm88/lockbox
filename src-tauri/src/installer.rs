@@ -397,78 +397,95 @@ fn install_windows_installer(
         .map_err(|e| format!("failed to stage installer: {e}"))?;
 
     let install_dir_string = install_dir.to_string_lossy().to_string();
+    let launcher_path = paths::safe_join(install_dir, launcher_name)?;
 
-    // Try standard NSIS-style silent install first.
-    let mut first_command = std::process::Command::new(&temp_path);
-    first_command.arg("/S").arg(format!("/D={install_dir_string}"));
-    let first_try = match run_with_timeout(first_command, INSTALLER_TIMEOUT) {
-        Ok(output) => output,
-        Err(e) => {
-            let _ = std::fs::remove_file(&temp_path);
-            return Err(e);
-        }
-    };
+    // Different silent-installer frameworks expect different flags for "no
+    // UI, and put it exactly here instead of Program Files" — there's no one
+    // universal convention, so each strategy is tried in turn until one
+    // actually produces the expected launcher at the expected path. A
+    // strategy that reports "success" but silently ignored the custom
+    // directory (installing to its own default location instead) is exactly
+    // as much a failure here as one that exits with an error — either way,
+    // the app didn't end up where it's supposed to live on the portable
+    // drive, which for a tool built around never touching the host is worse
+    // than an outright failure would be.
+    let ini_path = env::temp_dir().join(format!("lockbox-{app_id}-install.ini"));
+    let strategies: [(&str, Box<dyn Fn() -> std::process::Command>); 3] = [
+        ("NSIS", {
+            let temp_path = temp_path.clone();
+            let install_dir_string = install_dir_string.clone();
+            Box::new(move || {
+                let mut cmd = std::process::Command::new(&temp_path);
+                cmd.arg("/S").arg(format!("/D={install_dir_string}"));
+                cmd
+            })
+        }),
+        ("PortableApps/Inno", {
+            let temp_path = temp_path.clone();
+            let install_dir_string = install_dir_string.clone();
+            Box::new(move || {
+                let mut cmd = std::process::Command::new(&temp_path);
+                cmd.arg("/SILENT").arg(format!("/DESTINATION={install_dir_string}"));
+                cmd
+            })
+        }),
+        // Mozilla's Firefox/Thunderbird installers are NSIS-based but don't
+        // reliably honor a bare `/D=` for their full offline installer —
+        // Mozilla's own enterprise deployment docs instead document this
+        // INI-file form for pinning the install directory silently.
+        ("Mozilla INI", {
+            let temp_path = temp_path.clone();
+            let install_dir_string = install_dir_string.clone();
+            let ini_path = ini_path.clone();
+            Box::new(move || {
+                let _ = std::fs::write(
+                    &ini_path,
+                    format!("[Install]\r\nInstallDirectoryPath={install_dir_string}\r\n"),
+                );
+                let mut cmd = std::process::Command::new(&temp_path);
+                cmd.arg(format!("/INI={}", ini_path.to_string_lossy()));
+                cmd
+            })
+        }),
+    ];
 
-    // PortableApps installers often use /SILENT + /DESTINATION.
-    let needs_fallback = !first_try.status.success()
-        || !paths::safe_join(install_dir, launcher_name)?.is_file();
+    let mut attempts_output = Vec::new();
+    let mut succeeded = false;
 
-    let mut fallback_output_text = String::new();
-    if needs_fallback {
-        let mut second_command = std::process::Command::new(&temp_path);
-        second_command.arg("/SILENT").arg(format!("/DESTINATION={install_dir_string}"));
-        let second_try = match run_with_timeout(second_command, INSTALLER_TIMEOUT) {
+    for (label, build_command) in &strategies {
+        let output = match run_with_timeout(build_command(), INSTALLER_TIMEOUT) {
             Ok(output) => output,
             Err(e) => {
                 let _ = std::fs::remove_file(&temp_path);
+                let _ = std::fs::remove_file(&ini_path);
                 return Err(e);
             }
         };
 
-        if !second_try.status.success() {
-            let first_err = String::from_utf8_lossy(&first_try.stderr).trim().to_string();
-            let second_err = String::from_utf8_lossy(&second_try.stderr).trim().to_string();
-            let first_out = String::from_utf8_lossy(&first_try.stdout).trim().to_string();
-            let second_out = String::from_utf8_lossy(&second_try.stdout).trim().to_string();
-
-            let _ = std::fs::remove_file(&temp_path);
-
-            return Err(format!(
-                "installer failed in both modes (NSIS and PortableApps). First mode status: {}. Second mode status: {}. First stderr: {}. Second stderr: {}. First stdout: {}. Second stdout: {}",
-                first_try.status,
-                second_try.status,
-                if first_err.is_empty() { "<empty>" } else { &first_err },
-                if second_err.is_empty() { "<empty>" } else { &second_err },
-                if first_out.is_empty() { "<empty>" } else { &first_out },
-                if second_out.is_empty() { "<empty>" } else { &second_out }
-            ));
+        let placed_correctly = launcher_path.is_file();
+        if output.status.success() && placed_correctly {
+            succeeded = true;
+            break;
         }
 
-        fallback_output_text = String::from_utf8_lossy(&second_try.stderr).trim().to_string();
-    } else if !first_try.status.success() {
-        let _ = std::fs::remove_file(&temp_path);
-        let stderr = String::from_utf8_lossy(&first_try.stderr).trim().to_string();
-        let stdout = String::from_utf8_lossy(&first_try.stdout).trim().to_string();
-        return Err(format!(
-            "installer exited with status {}. stderr: {}. stdout: {}",
-            first_try.status,
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        attempts_output.push(format!(
+            "{label} mode: status {}, launcher present: {placed_correctly}, stderr: {}, stdout: {}",
+            output.status,
             if stderr.is_empty() { "<empty>" } else { &stderr },
             if stdout.is_empty() { "<empty>" } else { &stdout }
         ));
     }
 
     let _ = std::fs::remove_file(&temp_path);
+    let _ = std::fs::remove_file(&ini_path);
 
-    let launcher_path = paths::safe_join(install_dir, launcher_name)?;
-    if !launcher_path.is_file() {
+    if !succeeded {
         return Err(format!(
-            "installer did not create expected launcher: {}{}",
+            "installer did not produce the expected launcher at {} after trying every known silent-install convention. {}",
             launcher_path.display(),
-            if fallback_output_text.is_empty() {
-                "".to_string()
-            } else {
-                format!(" (fallback stderr: {fallback_output_text})")
-            }
+            attempts_output.join(" | ")
         ));
     }
 

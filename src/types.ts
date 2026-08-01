@@ -1,4 +1,4 @@
-export type TabId = "vault" | "appstore" | "cloudsync" | "settings";
+export type TabId = "vault" | "appstore" | "thirdpartyapps" | "cloudsync" | "settings";
 
 export interface NavItem {
   id: TabId;
@@ -9,6 +9,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { id: "vault", label: "Vault", icon: "🔐" },
   { id: "appstore", label: "App Store", icon: "🛍️" },
+  { id: "thirdpartyapps", label: "Third Party Apps", icon: "📦" },
   { id: "cloudsync", label: "Cloud Sync", icon: "☁️" },
   { id: "settings", label: "Settings", icon: "⚙️" },
 ];

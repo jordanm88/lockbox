@@ -28,6 +28,21 @@ export function getAppCatalog(): Promise<CatalogEntry[]> {
   return invoke<CatalogEntry[]>("get_app_catalog");
 }
 
+export interface ThirdPartyApp {
+  id: string;
+  name: string;
+  launcherPath: string | null;
+}
+
+/** Scans `ThirdPartyApps/` for apps the user copied in by hand. */
+export function scanThirdPartyApps(): Promise<ThirdPartyApp[]> {
+  return invoke<ThirdPartyApp[]>("scan_third_party_apps");
+}
+
+export function launchThirdPartyApp(appPath: string): Promise<void> {
+  return invoke<void>("launch_third_party_app", { appPath });
+}
+
 export function installApp(appId: string): Promise<void> {
   return invoke<void>("install_app", { appId });
 }

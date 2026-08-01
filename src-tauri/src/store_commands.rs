@@ -1,7 +1,7 @@
 use crate::state::{lock_recover, AppState};
 use crate::{catalog, installer, paths, usb_root};
 use serde::Serialize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tauri::{AppHandle, State};
 
 #[derive(Serialize)]
@@ -39,7 +39,6 @@ fn install_kind_label(target: &catalog::TargetSpec) -> String {
     match target.archive_type {
         catalog::ArchiveType::Zip => "ZIP package".to_string(),
         catalog::ArchiveType::TarGz => "tar.gz package".to_string(),
-        catalog::ArchiveType::Appimage => "AppImage".to_string(),
         catalog::ArchiveType::Binary => "Direct binary".to_string(),
         catalog::ArchiveType::Exe => "Windows executable".to_string(),
         catalog::ArchiveType::Installer => "Windows installer".to_string(),
@@ -110,17 +109,22 @@ pub fn install_app(
 
 #[tauri::command]
 pub fn launch_portable_app(state: State<AppState>, app_path: String) -> Result<(), String> {
-    let apps_dir = usb_root::apps_dir(&state.root);
-    let resolved = paths::safe_join(&apps_dir, &app_path)?;
+    launch_from(&usb_root::apps_dir(&state.root), &app_path)
+}
+
+#[tauri::command]
+pub fn launch_third_party_app(state: State<AppState>, app_path: String) -> Result<(), String> {
+    launch_from(&usb_root::third_party_apps_dir(&state.root), &app_path)
+}
+
+fn launch_from(base_dir: &Path, app_path: &str) -> Result<(), String> {
+    let resolved = paths::safe_join(base_dir, app_path)?;
 
     if !resolved.is_file() {
         return Err(format!("launcher not found: {app_path}"));
     }
 
-    #[cfg(unix)]
-    ensure_executable(&resolved)?;
-
-    let working_dir = resolved.parent().unwrap_or(&apps_dir);
+    let working_dir = resolved.parent().unwrap_or(base_dir);
     std::process::Command::new(&resolved)
         .current_dir(working_dir)
         .spawn()
@@ -129,15 +133,105 @@ pub fn launch_portable_app(state: State<AppState>, app_path: String) -> Result<(
     Ok(())
 }
 
-#[cfg(unix)]
-fn ensure_executable(path: &Path) -> Result<(), String> {
-    use std::os::unix::fs::PermissionsExt;
-    let metadata = std::fs::metadata(path).map_err(|e| format!("failed to stat launcher: {e}"))?;
-    let mut perms = metadata.permissions();
-    if perms.mode() & 0o111 == 0 {
-        perms.set_mode(perms.mode() | 0o755);
-        std::fs::set_permissions(path, perms)
-            .map_err(|e| format!("failed to make launcher executable: {e}"))?;
+/// Filename fragments that mark an .exe as a helper/uninstaller/updater
+/// rather than the app's own launcher — a manually-dropped-in portable app's
+/// folder often has several of these alongside the one binary users actually
+/// want, and picking one of these instead would "launch" the wrong thing.
+const IGNORED_LAUNCHER_PATTERNS: &[&str] = &[
+    "unins",
+    "uninstall",
+    "setup",
+    "updater",
+    "update.exe",
+    "crashpad_handler",
+    "vc_redist",
+];
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThirdPartyApp {
+    id: String,
+    name: String,
+    launcher_path: Option<String>,
+}
+
+/// Scans `ThirdPartyApps/` for portable apps the user copied in by hand
+/// (rather than installing through the App Store) so they still show up
+/// somewhere in the UI. Each immediate subfolder becomes one entry; the
+/// launcher is guessed as the largest non-helper .exe found anywhere inside
+/// it, since the main application binary is almost always the biggest file
+/// while uninstallers/updaters/crash-handlers are small. Re-run on every
+/// call rather than cached, so dropping in a new folder shows up on the
+/// App Store's next periodic refresh without restarting Lockbox.
+#[tauri::command]
+pub fn scan_third_party_apps(state: State<AppState>) -> Result<Vec<ThirdPartyApp>, String> {
+    let root = usb_root::third_party_apps_dir(&state.root);
+
+    let entries = match std::fs::read_dir(&root) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(format!("failed to scan ThirdPartyApps: {e}")),
+    };
+
+    let mut apps = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("failed to read ThirdPartyApps entry: {e}"))?;
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().to_string();
+
+        let mut candidates = Vec::new();
+        find_exe_files(&path, &mut candidates)?;
+        candidates.retain(|candidate| {
+            let lower = candidate
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            !IGNORED_LAUNCHER_PATTERNS
+                .iter()
+                .any(|pattern| lower.contains(pattern))
+        });
+        candidates.sort_by_key(|candidate| {
+            std::cmp::Reverse(std::fs::metadata(candidate).map(|m| m.len()).unwrap_or(0))
+        });
+
+        let launcher_path = candidates.first().map(|candidate| {
+            candidate
+                .strip_prefix(&root)
+                .unwrap_or(candidate)
+                .to_string_lossy()
+                .replace('\\', "/")
+        });
+
+        apps.push(ThirdPartyApp {
+            id: name.clone(),
+            name,
+            launcher_path,
+        });
+    }
+
+    apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    Ok(apps)
+}
+
+fn find_exe_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
+    for entry in
+        std::fs::read_dir(dir).map_err(|e| format!("failed to scan {}: {e}", dir.display()))?
+    {
+        let entry = entry.map_err(|e| format!("failed to read directory entry: {e}"))?;
+        let path = entry.path();
+        if path.is_dir() {
+            find_exe_files(&path, out)?;
+        } else if path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
+        {
+            out.push(path);
+        }
     }
     Ok(())
 }

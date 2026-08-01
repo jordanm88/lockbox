@@ -1,5 +1,9 @@
+import { useState } from "react";
 import { NAV_ITEMS, TabId } from "../types";
 import StorageMeter from "./StorageMeter";
+import ConfirmDialog from "./ConfirmDialog";
+import { ejectUsbDrive } from "../lib/vaultBridge";
+import { getErrorMessage } from "../lib/errors";
 
 interface SidebarProps {
   activeTab: TabId;
@@ -8,6 +12,25 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ activeTab, onSelectTab, onLock }: SidebarProps) {
+  const [ejectConfirmOpen, setEjectConfirmOpen] = useState(false);
+  const [ejecting, setEjecting] = useState(false);
+  const [ejectStatus, setEjectStatus] = useState<string | null>(null);
+
+  async function handleEject() {
+    setEjectConfirmOpen(false);
+    setEjecting(true);
+    setEjectStatus(null);
+    try {
+      const result = await ejectUsbDrive();
+      // Lockbox is about to close itself (see eject.rs), so this message
+      // may only be visible for a moment — that's expected, not a bug.
+      setEjectStatus(result.message);
+    } catch (err) {
+      setEjectStatus(getErrorMessage(err, "Failed to eject the drive."));
+      setEjecting(false);
+    }
+  }
+
   return (
     // h-full + overflow-hidden pins the sidebar to exactly the viewport
     // height its flex parent gives it, regardless of window size; the nav
@@ -43,7 +66,12 @@ export default function Sidebar({ activeTab, onSelectTab, onLock }: SidebarProps
 
       <div className="shrink-0 border-t border-slate-200">
         <StorageMeter />
-        <div className="px-4 pb-4 pt-1">
+        {ejectStatus && (
+          <p className="mx-4 mt-2 rounded-lg bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">
+            {ejectStatus}
+          </p>
+        )}
+        <div className="flex flex-col gap-2 px-4 pb-4 pt-1">
           <button
             type="button"
             onClick={onLock}
@@ -51,8 +79,26 @@ export default function Sidebar({ activeTab, onSelectTab, onLock }: SidebarProps
           >
             🔒 Lock Vault
           </button>
+          <button
+            type="button"
+            onClick={() => setEjectConfirmOpen(true)}
+            disabled={ejecting}
+            className="flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 disabled:opacity-60"
+          >
+            {ejecting ? "Ejecting…" : "⏏ Eject USB"}
+          </button>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={ejectConfirmOpen}
+        title="Eject this drive?"
+        description="Lockbox will lock the vault, clean up its own temp files, then close so the drive can be safely removed. Wait for Windows' removal notification before unplugging."
+        confirmLabel="Eject"
+        cancelLabel="Cancel"
+        onConfirm={handleEject}
+        onCancel={() => setEjectConfirmOpen(false)}
+      />
     </aside>
   );
 }

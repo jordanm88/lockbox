@@ -9,9 +9,19 @@ import {
   getAppCatalog,
   installApp,
   launchPortableApp,
+  launchThirdPartyApp,
   onInstallProgress,
+  scanThirdPartyApps,
+  ThirdPartyApp,
   uninstallApp,
 } from "../lib/appStoreBridge";
+
+// ThirdPartyApps/ is just a folder someone can drop a portable app into
+// outside the App Store entirely, so there's no event to tell us when that
+// happens — re-scanning it every 20s while this page is open is the
+// cheapest way to have manually-added apps "just show up" without the user
+// needing to know to hit refresh.
+const THIRD_PARTY_RESCAN_MS = 20_000;
 
 interface ProgressState {
   downloadedBytes: number;
@@ -35,6 +45,9 @@ export default function AppStore() {
   const [installingIds, setInstallingIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState(ALL_CATEGORY);
+  const [thirdPartyApps, setThirdPartyApps] = useState<ThirdPartyApp[]>([]);
+  const [thirdPartyError, setThirdPartyError] = useState<string | null>(null);
+  const [launchingThirdPartyId, setLaunchingThirdPartyId] = useState<string | null>(null);
 
   async function refresh() {
     try {
@@ -47,8 +60,20 @@ export default function AppStore() {
     }
   }
 
+  async function refreshThirdPartyApps() {
+    try {
+      setThirdPartyApps(await scanThirdPartyApps());
+      setThirdPartyError(null);
+    } catch (err) {
+      setThirdPartyError(getErrorMessage(err, "Failed to scan ThirdPartyApps."));
+    }
+  }
+
   useEffect(() => {
     refresh();
+    refreshThirdPartyApps();
+
+    const thirdPartyTimer = setInterval(refreshThirdPartyApps, THIRD_PARTY_RESCAN_MS);
 
     const unlistenPromise = onInstallProgress((event) => {
       setProgress((current) => ({
@@ -62,9 +87,23 @@ export default function AppStore() {
     });
 
     return () => {
+      clearInterval(thirdPartyTimer);
       unlistenPromise.then((unlisten) => unlisten());
     };
   }, []);
+
+  async function handleLaunchThirdParty(app: ThirdPartyApp) {
+    if (!app.launcherPath) return;
+    setLaunchingThirdPartyId(app.id);
+    setThirdPartyError(null);
+    try {
+      await launchThirdPartyApp(app.launcherPath);
+    } catch (err) {
+      setThirdPartyError(getErrorMessage(err, `Failed to launch ${app.name}.`));
+    } finally {
+      setLaunchingThirdPartyId(null);
+    }
+  }
 
   async function handleInstall(entry: CatalogEntry) {
     setInstallingIds((current) => new Set(current).add(entry.id));
@@ -311,6 +350,53 @@ export default function AppStore() {
           })}
         </div>
       )}
+
+      {/* Apps copied straight into ThirdPartyApps/ instead of installed
+          through the App Store above — kept in their own section since
+          Lockbox didn't download or verify them, only found them. */}
+      <div className="mt-8">
+        <div className="mb-3 flex items-center gap-2">
+          <h2 className="text-lg font-bold text-ink">Third-Party Apps</h2>
+          <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+            Manually added
+          </span>
+        </div>
+        <p className="mb-4 text-sm text-slate-600">
+          Portable apps you copy into <span className="font-semibold text-ink">ThirdPartyApps/</span> on the drive
+          show up here automatically — Lockbox didn't download these and can't verify them, it just found them.
+        </p>
+
+        {thirdPartyError && (
+          <p className="neo-card mb-4 bg-neo-red px-4 py-3 text-sm font-semibold text-white">{thirdPartyError}</p>
+        )}
+
+        {thirdPartyApps.length === 0 ? (
+          <div className="neo-card p-6 text-center text-sm font-semibold text-slate-600">
+            No manually-added apps found. Copy a portable app's folder into ThirdPartyApps/ to see it here.
+          </div>
+        ) : (
+          <div className="neo-panel divide-y divide-slate-200 overflow-hidden bg-white">
+            {thirdPartyApps.map((app) => (
+              <div key={app.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+                <div className="min-w-0">
+                  <p className="truncate text-base font-semibold text-ink">{app.name}</p>
+                  <p className="mt-0.5 text-sm text-slate-500">
+                    {app.launcherPath ? app.launcherPath : "No executable found in this folder."}
+                  </p>
+                </div>
+                <ActionButton
+                  type="button"
+                  onClick={() => handleLaunchThirdParty(app)}
+                  disabled={!app.launcherPath || launchingThirdPartyId === app.id}
+                  variant="primary"
+                >
+                  {launchingThirdPartyId === app.id ? "Launching…" : "▶ Launch"}
+                </ActionButton>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <ConfirmDialog
         open={confirmOpen}

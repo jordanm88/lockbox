@@ -23,7 +23,7 @@ if (-not (Test-Path $UsbDrivePath)) {
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $builtExe = Join-Path $repoRoot "src-tauri\target\release\Lockbox.exe"
-$rcloneRoot = Join-Path $UsbDrivePath "Tools\win"
+$rcloneRoot = Join-Path $UsbDrivePath "Tools"
 $rcloneExe = Join-Path $rcloneRoot "rclone.exe"
 
 function Get-RcloneDownloadUri {
@@ -78,7 +78,7 @@ if (-not (Test-Path $builtExe)) {
 }
 
 Write-Host "Setting up USB folder layout at $UsbDrivePath ..."
-foreach ($dir in @("Vault", "Apps", "Tools\win", "Tools\mac", "Tools\linux")) {
+foreach ($dir in @("Vault", "Apps", "ThirdPartyApps", "Tools")) {
     New-Item -ItemType Directory -Force -Path (Join-Path $UsbDrivePath $dir) | Out-Null
 }
 
@@ -111,8 +111,7 @@ Write-Host "Done. USB layout:"
 Write-Host "  $UsbDrivePath\Lockbox-Windows.exe"
 Write-Host "  $UsbDrivePath\Vault\"
 Write-Host "  $UsbDrivePath\Apps\"
-Write-Host "  $UsbDrivePath\Tools\win\rclone.exe"
-Write-Host "  $UsbDrivePath\Tools\mac\"
-Write-Host "  $UsbDrivePath\Tools\linux\"
+Write-Host "  $UsbDrivePath\ThirdPartyApps\"
+Write-Host "  $UsbDrivePath\Tools\rclone.exe"
 Write-Host ""
 Write-Host "If Windows SmartScreen blocks the exe on first run, see docs/DISTRIBUTION.md."

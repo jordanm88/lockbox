@@ -3,6 +3,7 @@ mod cloud_commands;
 mod cloud_config;
 mod commands;
 mod crypto;
+mod eject;
 mod installer;
 mod paths;
 mod rclone;
@@ -54,6 +55,8 @@ pub fn run() {
             store_commands::get_app_catalog,
             store_commands::install_app,
             store_commands::launch_portable_app,
+            store_commands::scan_third_party_apps,
+            store_commands::launch_third_party_app,
             commands::delete_vault_entry,
             commands::export_vault_file,
             commands::export_vault_folder,
@@ -65,6 +68,7 @@ pub fn run() {
             cloud_commands::load_cloud_config,
             cloud_commands::sync_vault_now,
             cloud_commands::test_cloud_connection,
+            eject::eject_usb_drive,
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| fatal_startup_error(&format!("Tauri failed to start: {e}")));

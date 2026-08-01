@@ -8,15 +8,10 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 
 const REMOTE_NAME: &str = "lockbox_remote";
 
-/// USB_ROOT/Tools/{win,mac,linux}/rclone(.exe) — the embedded, per-OS
-/// binary. Nothing here assumes rclone is installed on the host.
+/// USB_ROOT/Tools/rclone.exe — the embedded binary. Nothing here assumes
+/// rclone is installed on the host.
 pub fn rclone_binary_path(root: &Path) -> PathBuf {
-    let os_dir = usb_root::tools_os_dir(root);
-    if cfg!(target_os = "windows") {
-        os_dir.join("rclone.exe")
-    } else {
-        os_dir.join("rclone")
-    }
+    usb_root::tools_dir(root).join("rclone.exe")
 }
 
 #[derive(Clone, Serialize)]
@@ -66,7 +61,7 @@ pub async fn run_rclone_sync(
     let target = remote_target(REMOTE_NAME, &config);
     // Force rclone to use only the remote we defined via env vars, never
     // whatever config file (if any) happens to exist on the host.
-    let null_config_path = if cfg!(target_os = "windows") { "NUL" } else { "/dev/null" };
+    let null_config_path = "NUL";
 
     // `rclone sync` mirrors source onto dest, deleting anything in dest that
     // isn't in source. If the local vault is empty, only allow this to
@@ -165,7 +160,7 @@ pub async fn run_rclone_test(
     };
 
     let target = remote_target(REMOTE_NAME, &config);
-    let null_config_path = if cfg!(target_os = "windows") { "NUL" } else { "/dev/null" };
+    let null_config_path = "NUL";
 
     let mut command = tokio::process::Command::new(&rclone_path);
     command
@@ -419,11 +414,7 @@ fn resolve_rclone_binary(root: &Path) -> Result<PathBuf, String> {
     }
 
     // Fallback to host PATH for development/desktop scenarios.
-    let cmd = if cfg!(target_os = "windows") {
-        "rclone.exe"
-    } else {
-        "rclone"
-    };
+    let cmd = "rclone.exe";
 
     let probe = std::process::Command::new(cmd)
         .arg("version")

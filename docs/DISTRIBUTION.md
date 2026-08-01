@@ -1,17 +1,20 @@
 # Building, packaging, and running Lockbox from a USB drive
 
+Lockbox targets Windows only. This document describes the Windows build and
+distribution flow end to end.
+
 ## 1. Build
 
-CI (`.github/workflows/build.yml`) builds all three platforms in parallel on
-every push to `main` and on `v*` tags, and uploads each platform's raw build
-output as a workflow artifact. To build locally instead:
+CI (`.github/workflows/build.yml`) builds on every push to `main` and on
+`v*` tags, and uploads the raw build output as a workflow artifact. To build
+locally instead:
 
 ```
 npm ci
 npm run tauri -- build
 ```
 
-Or on Windows only, use the included helper script:
+Or use the included helper script:
 
 ```powershell
 scripts\build-win.ps1
@@ -24,21 +27,14 @@ portable executable into `build\Lockbox-Windows.exe`.
 > (https://rustup.rs/) and make sure `cargo` is available before running the
 > helper script.
 >
-> If Windows still fails to build, also install the Visual Studio/MSVC C++
-> build tools required by the `x86_64-pc-windows-msvc` target.
+> If the build still fails, also install the Visual Studio/MSVC C++ build
+> tools required by the `x86_64-pc-windows-msvc` target.
 
-This produces:
-
-| OS      | Portable artifact                                            |
-| ------- | -------------------------------------------------------------- |
-| Windows | `src-tauri/target/release/Lockbox.exe` (raw exe, not the NSIS/MSI installer) |
-| macOS   | `src-tauri/target/release/bundle/macos/Lockbox.app`             |
-| Linux   | `src-tauri/target/release/bundle/appimage/*.AppImage`           |
-
-Tauri's bundle config also produces installer-style artifacts (`.msi`,
-NSIS `.exe`, `.deb`, `.rpm`) alongside these — ignore them for USB use, they
-install onto the host rather than running portably. The packaging scripts
-below only pick out the three portable forms above.
+This produces `src-tauri/target/release/Lockbox.exe` — the raw portable exe,
+not the NSIS/MSI installer. Tauri's bundle config also produces
+installer-style artifacts (`.msi`, NSIS `.exe`) alongside it — ignore them
+for USB use, they install onto the host rather than running portably. The
+packaging script below only picks out the portable exe.
 
 ### Minimizing host footprint when using an installer (MSI/NSIS)
 
@@ -47,9 +43,9 @@ removable drive and run there, prefer creating a *portable* installation
 that avoids writing data to the host machine's profile areas and registry.
 Two practical approaches:
 
-- Prefer shipping a ZIP/portable executable and instruct users to run the
-	executable directly from the drive — this is the safest option and is the
-	recommended distribution for Lockbox. The packaging scripts above are
+- Prefer shipping the raw portable executable and instruct users to run it
+	directly from the drive — this is the safest option and is the
+	recommended distribution for Lockbox. `scripts\package-usb.ps1` is
 	designed for this flow.
 - If you must ship an MSI, build it so the user can choose a "portable"
 	install location and avoid system-wide registration. For WiX-based MSI
@@ -72,52 +68,29 @@ parent directory as the vault root, so when the exe is run from the USB
 drive it stores `Vault/` and `Apps/` next to the binary rather than on the
 host.
 
-If you want, I can help generate a WiX installer recipe that exposes a
-"portable" option and documents the exact properties to pass at install
-time.
-
 ## 2. Package onto a USB drive
 
-Each script creates the `Vault/`, `Apps/`, `Tools/{win,mac,linux}/` layout
-(if not already present) and copies the correct portable artifact to
-`USB_ROOT` under its conventional name. Run the one matching the OS you
-built on:
+The packaging script creates the `Vault/`, `Apps/`, `ThirdPartyApps/`,
+`Tools/` layout (if not already present) and copies the built executable to
+`USB_ROOT` under its conventional name:
 
 ```powershell
-# Windows
 .\scripts\package-usb.ps1 -UsbDrivePath E:\
 # or just double-click scripts\package-usb.bat and pass the drive letter
 ```
 
-```bash
-# macOS
-./scripts/package-usb.sh /Volumes/LOCKBOX
+The script also checks for a real `rclone` binary under `Tools/`, and
+downloads the current official `rclone` release automatically to refresh it
+in place, so the drive stays self-contained when you re-run packaging.
 
-# Linux
-./scripts/package-usb.sh /media/$USER/LOCKBOX
-```
+If you are assembling a drive by hand instead of using the packaging script,
+copy `rclone.exe` into `Tools/rclone.exe`. Cloud Sync will not work until
+that binary exists on the USB drive.
 
-Since there's no cross-compilation set up, packaging all three platforms
-onto one drive means running the matching build + script on each OS (or
-building in CI and downloading each platform's artifact locally before
-running its script). Each script also checks for a real `rclone` binary
-under `Tools/<os>/`. The packaging scripts now download the current official
-`rclone` release automatically and refresh it in place, so the drive stays
-self-contained when you re-run packaging.
-
-If you are assembling a drive by hand instead of using the packaging scripts,
-copy the matching binary into:
-
-- `Tools/win/rclone.exe`
-- `Tools/mac/rclone`
-- `Tools/linux/rclone`
-
-Cloud Sync will not work until that binary exists on the USB drive.
-
-> Updating an existing USB drive is safe: the packaging scripts preserve
-> existing `Vault/`, `Apps/`, and `Tools/` content and only replace the
-> Lockbox executable or app bundle itself. User data and installed apps are
-> left intact.
+> Updating an existing USB drive is safe: the packaging script preserves
+> existing `Vault/`, `Apps/`, `ThirdPartyApps/`, and `Tools/` content and
+> only replaces the Lockbox executable itself. User data and installed apps
+> are left intact.
 
 ## 2b. Running from a cloud-synced folder instead of a USB drive
 
@@ -141,70 +114,13 @@ held for the process's lifetime — a second instance pointed at the same
 of silently racing the first instance and corrupting or losing data. Close
 the other instance first, let it fully sync, then relaunch.
 
-## 3. Bypassing host OS security flags
-
-All three OSes treat an unsigned executable arriving from removable media
-with more suspicion than one that was "installed" normally. None of this is
-Lockbox-specific — it's the same friction any unsigned portable app hits —
-but it's worth knowing the exact commands since the whole point of this
-project is running straight off the drive with no install step.
-
-### macOS: Gatekeeper quarantine
-
-The first time a `.app` is copied onto a Mac from another machine or a
-mounted volume, macOS tags it with the `com.apple.quarantine` extended
-attribute. Gatekeeper then refuses to launch it — often with the misleading
-message *"Lockbox-macOS.app is damaged and can't be opened"*, which despite
-the wording usually just means "quarantined and unsigned," not actually
-corrupted.
-
-Fastest fix, from Terminal:
-
-```bash
-xattr -cr /Volumes/LOCKBOX/Lockbox-macOS.app
-```
-
-(`-c` clears all extended attributes, `-r` recurses through the bundle.)
-
-Without Terminal access: open **System Settings → Privacy & Security**,
-scroll to the block notice for Lockbox, and click **Open Anyway** — this
-only appears after the first blocked launch attempt.
-
-The durable fix for real distribution is code-signing + notarization with
-an Apple Developer ID account (`codesign` + `xcrun notarytool`) so Gatekeeper
-trusts the binary outright. That's not set up in this project yet — it needs
-a paid Apple Developer account and signing certificates that don't exist
-here, so `xattr -cr` is the practical workaround until that's added.
-
-### Linux: execute permission (and exFAT specifically)
-
-```bash
-chmod +x /media/$USER/LOCKBOX/Lockbox-Linux.AppImage
-```
-
-Worth knowing for this project specifically: **exFAT has no concept of Unix
-permission bits at all.** Every file on an exFAT volume gets its executable
-status from the *mount options* (`fmask`/`umask`), not from anything stored
-per-file — so depending on how a given Linux distro auto-mounts exFAT
-drives, the AppImage can silently lose its executable bit again the next
-time the drive is unplugged and remounted, even though nothing on the drive
-itself changed. If `chmod +x` seems to "not stick" across reboots/remounts,
-that's why — either re-run `chmod +x` after each remount, or remount the
-drive with an `fmask` that keeps files executable (e.g. `-o fmask=0000` in
-the mount options, if you control how it's mounted).
-
-Also worth knowing: some newer distros (Ubuntu 24.04+) ship without FUSE2,
-which classic AppImages need to mount themselves. If launching produces a
-FUSE-related error, either `sudo apt install libfuse2t64` (or `libfuse2` on
-older releases), or run the AppImage with `--appimage-extract-and-run`,
-which skips the FUSE mount entirely.
-
-### Windows: SmartScreen
+## 3. Bypassing Windows SmartScreen
 
 An unsigned `.exe` with no download reputation can trigger *"Windows
 protected your PC"* from Defender SmartScreen the first time it's run on a
-given machine, independent of where it's launched from. Click **More info**
-→ **Run anyway** in that dialog.
+given machine, independent of where it's launched from. This isn't
+Lockbox-specific — it's the same friction any unsigned portable app hits.
+Click **More info** → **Run anyway** in that dialog.
 
 If the executable does carry a zone-identifier mark (this happens if it was
 downloaded directly onto an NTFS-formatted machine before being copied to
@@ -215,8 +131,9 @@ it can be cleared from PowerShell:
 ```powershell
 Unblock-File -Path "E:\Lockbox-Windows.exe"
 ```
-The included `scripts/package-usb.ps1` now also attempts to unblock the copied
-exe automatically when packaging onto a Windows USB drive.
-As with macOS, the durable fix is Authenticode code-signing with a trusted
-certificate, which builds SmartScreen reputation over time — not set up
-here, same reason as the Gatekeeper case above.
+
+`scripts\package-usb.ps1` also attempts to unblock the copied exe
+automatically when packaging onto a USB drive. The durable fix is
+Authenticode code-signing with a trusted certificate, which builds
+SmartScreen reputation over time — not set up here, since it requires a paid
+code-signing certificate that doesn't exist in this project yet.

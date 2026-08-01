@@ -234,7 +234,7 @@ export default function CloudSync({
           <p className="mb-3 text-sm font-semibold text-slate-600">Provider</p>
           <p className="mb-4 text-sm text-slate-600">
             Cloud sync uses a local <span className="font-semibold text-ink">rclone</span> binary from the USB drive. Put
-            <span className="font-semibold text-ink"> Tools/win/rclone.exe</span> on Windows (or <span className="font-semibold text-ink">Tools/mac/rclone</span> / <span className="font-semibold text-ink">Tools/linux/rclone</span> on those platforms).
+            <span className="font-semibold text-ink"> Tools/rclone.exe</span> there — the packaging scripts do this for you automatically.
           </p>
           <div className="mb-6 flex flex-wrap gap-3">
             {PROVIDERS.map((option) => (

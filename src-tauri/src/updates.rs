@@ -48,7 +48,7 @@ pub fn check_portable_update(app_handle: AppHandle) -> Result<PortableUpdateInfo
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
-    let (asset_name, asset_download_url) = if cfg!(target_os = "windows") && has_update {
+    let (asset_name, asset_download_url) = if has_update {
         find_windows_portable_asset(&latest_release)
     } else {
         (None, None)
@@ -69,20 +69,11 @@ pub fn apply_portable_update(
     app_handle: AppHandle,
     download_url: String,
 ) -> Result<ApplyUpdateResult, String> {
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = (app_handle, download_url);
-        return Err("portable self-update is currently implemented for Windows only".to_string());
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        apply_windows_portable_update(&app_handle, &download_url)?;
-        Ok(ApplyUpdateResult {
-            started: true,
-            message: "Update downloaded. Lockbox will close now and restart into the new version.".to_string(),
-        })
-    }
+    apply_windows_portable_update(&app_handle, &download_url)?;
+    Ok(ApplyUpdateResult {
+        started: true,
+        message: "Update downloaded. Lockbox will close now and restart into the new version.".to_string(),
+    })
 }
 
 fn read_repo_from_config(app_handle: &AppHandle) -> Result<String, String> {
@@ -194,7 +185,6 @@ fn find_windows_portable_asset(release: &Value) -> (Option<String>, Option<Strin
     }
 }
 
-#[cfg(target_os = "windows")]
 fn apply_windows_portable_update(app_handle: &AppHandle, download_url: &str) -> Result<(), String> {
     if !(download_url.starts_with("https://github.com/")
         || download_url.starts_with("https://objects.githubusercontent.com/")

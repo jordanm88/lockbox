@@ -35,7 +35,7 @@ function TryResolve([string]$url) {
 
 for ($i = 0; $i -lt $catalog.apps.Count; $i++) {
     $app = $catalog.apps[$i]
-    foreach ($os in @('windows','macos','linux')) {
+    foreach ($os in @('windows')) {
         if ($app.targets.PSObject.Properties.Name -contains $os) {
             $target = $app.targets.$os
             if (-not $target) { continue }

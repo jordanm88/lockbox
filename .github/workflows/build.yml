@@ -27,26 +27,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Only Linux runners need Tauri's system libraries.
-      # Windows runners ship MSVC and macOS runners ship Xcode CLT already.
-      # Package names are current for Tauri v2 on Ubuntu 22.04+; adjust if
-      # the runner's Ubuntu version moves and these get renamed again.
-      - name: Install Linux system dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libssl-dev \
-            libxdo-dev \
-            patchelf \
-            build-essential \
-            curl \
-            wget \
-            file
-
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 

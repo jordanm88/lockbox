@@ -137,3 +137,18 @@ export async function exportVaultFolder(relativePath: string): Promise<number | 
   if (!destinationDir || Array.isArray(destinationDir)) return null;
   return invoke<number>("export_vault_folder", { relativePath, destinationDir });
 }
+
+export interface EjectResult {
+  cleanedUp: string[];
+  message: string;
+}
+
+/**
+ * Cleans up Lockbox's own leftover temp files, locks the vault, then closes
+ * Lockbox and ejects its drive once the app's own file handles on it are
+ * released. Does not touch USB history in the registry, Windows Event Logs,
+ * or Prefetch/Amcache — see `eject.rs` for why.
+ */
+export function ejectUsbDrive(): Promise<EjectResult> {
+  return invoke<EjectResult>("eject_usb_drive");
+}

@@ -75,14 +75,9 @@ The App Store installs portable applications into the USB drive.
 - Uninstall removes that app folder from `Apps/`.
 - Reinstalling an app refreshes its folder from the catalog.
 
-The bundled catalog currently includes:
-
-- SumatraPDF
-- Firefox
-- Mozilla Thunderbird
-- Visual Studio Code
-- Notepad++ Portable
-- jq
+The bundled catalog currently includes 20 apps across Development, Games,
+Graphics & Pictures, Internet, Multimedia, Office, Security, and Utilities —
+see `src-tauri/resources/catalog.json` for the full, current list.
 
 ### Cloud Sync
 
@@ -90,25 +85,25 @@ Cloud Sync uses `rclone` to back up the vault to an external cloud destination.
 
 - Settings are saved encrypted in the vault.
 - Sync and test actions stream live progress into the UI.
-- The USB packaging scripts now download the current official `rclone` release automatically, so the drive stays self-contained when you repackage it.
-- If you assemble a drive manually, `rclone` must exist at `Tools/win/rclone.exe`, `Tools/mac/rclone`, or `Tools/linux/rclone` depending on the platform.
+- The USB packaging script downloads the current official `rclone` release automatically, so the drive stays self-contained when you repackage it.
+- If you assemble a drive manually, `rclone` must exist at `Tools/rclone.exe`.
 
 ## Build
 
-CI builds all three platforms on pushes to `main` and on `v*` tags. To build locally:
+CI builds on pushes to `main` and on `v*` tags. To build locally:
 
 ```bash
 npm ci
 npm run tauri -- build
 ```
 
-On Windows, you can use the helper script:
+Or use the helper script:
 
 ```powershell
 scripts\build-win.ps1
 ```
 
-Windows builds require:
+Building requires:
 
 - A Rust toolchain on `PATH`.
 - `cargo` available.
@@ -116,37 +111,23 @@ Windows builds require:
 
 ## Package Onto USB
 
-The packaging scripts create this layout on the drive:
+The packaging script creates this layout on the drive:
 
 - `Vault/`
 - `Apps/`
-- `Tools/win/`
-- `Tools/mac/`
-- `Tools/linux/`
-
-### Windows
+- `ThirdPartyApps/`
+- `Tools/`
 
 ```powershell
 .\scripts\package-usb.ps1 -UsbDrivePath E:\
+# or double-click scripts\package-usb.bat and pass the drive letter
 ```
 
-### macOS
+The script is update-safe:
 
-```bash
-./scripts/package-usb.sh /Volumes/LOCKBOX
-```
-
-### Linux
-
-```bash
-./scripts/package-usb.sh /media/$USER/LOCKBOX
-```
-
-The scripts are update-safe:
-
-- They preserve existing `Vault/`, `Apps/`, and `Tools/` content.
-- They replace the Lockbox binary or app bundle.
-- They refresh the bundled `rclone` binary from the current official release.
+- It preserves existing `Vault/`, `Apps/`, `ThirdPartyApps/`, and `Tools/` content.
+- It replaces the Lockbox binary.
+- It refreshes the bundled `rclone` binary from the current official release.
 
 ## Update Behavior
 
@@ -172,29 +153,13 @@ That means:
 
 ## Security Notes
 
-Lockbox is built to minimize host-machine residue, but a few platform-specific behaviors still matter.
+Lockbox is built to minimize host-machine residue. Unsigned executables may
+trigger Windows SmartScreen the first time they run on a machine — use
+**More info** → **Run anyway** if prompted (see `docs/DISTRIBUTION.md` for
+details).
 
-### Windows
-
-Unsigned executables may trigger SmartScreen the first time they run on a machine. Use **More info** → **Run anyway** if prompted.
-
-### macOS
-
-macOS may quarantine `.app` bundles copied from another machine or a removable drive. If needed, clear quarantine with:
-
-```bash
-xattr -cr /Volumes/LOCKBOX/Lockbox-macOS.app
-```
-
-### Linux
-
-AppImage files need execute permission:
-
-```bash
-chmod +x /media/$USER/LOCKBOX/Lockbox-Linux.AppImage
-```
-
-On exFAT drives, execute bits are controlled by mount options rather than stored per file, so you may need to reapply `chmod +x` after remounting.
+For how the vault itself is encrypted, and an honest assessment of what that
+protects against (and what it doesn't), see [`docs/SECURITY.md`](docs/SECURITY.md).
 
 ## Notes On Portable Installation
 

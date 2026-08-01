@@ -34,21 +34,11 @@ pub struct CatalogApp {
 pub struct TargetsByOs {
     #[serde(default)]
     pub windows: Option<TargetSpec>,
-    #[serde(default)]
-    pub macos: Option<TargetSpec>,
-    #[serde(default)]
-    pub linux: Option<TargetSpec>,
 }
 
 impl TargetsByOs {
     pub fn for_current_os(&self) -> Option<&TargetSpec> {
-        if cfg!(target_os = "windows") {
-            self.windows.as_ref()
-        } else if cfg!(target_os = "macos") {
-            self.macos.as_ref()
-        } else {
-            self.linux.as_ref()
-        }
+        self.windows.as_ref()
     }
 }
 
@@ -70,8 +60,6 @@ pub enum ArchiveType {
     Zip,
     #[serde(rename = "tar.gz")]
     TarGz,
-    #[serde(rename = "appimage")]
-    Appimage,
     #[serde(rename = "binary")]
     Binary,
     #[serde(rename = "exe")]

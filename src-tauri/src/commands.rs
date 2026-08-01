@@ -345,11 +345,48 @@ fn load_or_upgrade_index(vault_dir: &Path, key: &crypto::VaultKey) -> Result<Vau
         needs_save = true;
     }
 
+    // Covers a narrower case dedup can't: a single entry (no duplicate)
+    // mistakenly left as `is_dir: false` by an older bug, with other entries
+    // still nested underneath it. That's a state normal operation can never
+    // produce today (a file can't have children), so finding one is
+    // conclusive proof of historical corruption, not a false positive — and
+    // it's exactly what made a folder permanently show up as a file, unable
+    // to be opened, with its own contents stuck unreachable underneath it.
+    if promote_files_with_children(&mut index) {
+        needs_save = true;
+    }
+
     if needs_save {
         save_index(vault_dir, key, &index)?;
     }
 
     Ok(index)
+}
+
+/// Retypes any entry marked as a file that has other entries nested under it
+/// (i.e. some other entry's path starts with `"{this path}/"`) into a
+/// directory, clearing its now-meaningless `blob_name`/`size` — see the call
+/// site in `load_or_upgrade_index` for why this situation is unambiguous.
+fn promote_files_with_children(index: &mut VaultIndex) -> bool {
+    let mut changed = false;
+    for i in 0..index.entries.len() {
+        if index.entries[i].is_dir {
+            continue;
+        }
+        let prefix = format!("{}/", index.entries[i].original_path);
+        let has_children = index
+            .entries
+            .iter()
+            .enumerate()
+            .any(|(j, entry)| j != i && entry.original_path.starts_with(&prefix));
+        if has_children {
+            index.entries[i].is_dir = true;
+            index.entries[i].blob_name = None;
+            index.entries[i].size = None;
+            changed = true;
+        }
+    }
+    changed
 }
 
 /// Removes duplicate `original_path` entries, keeping the last occurrence

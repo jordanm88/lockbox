@@ -4,6 +4,12 @@ import { getErrorMessage } from "../lib/errors";
 import pkg from "../../package.json";
 
 const CURRENT_YEAR = new Date().getFullYear();
+// This is the single biggest lever over the vault's real-world security —
+// Argon2id makes each guess expensive, but can't turn a short passphrase
+// into a strong one. 12 is the widely-cited modern minimum (NIST SP 800-63B,
+// OWASP) for a passphrase that's the sole credential protecting something,
+// with no second factor and no recovery path. See docs/SECURITY.md.
+const MIN_PASSPHRASE_LENGTH = 12;
 
 interface LockScreenProps {
   onUnlock: (passphrase: string) => Promise<boolean>;
@@ -44,8 +50,8 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
     setError(null);
 
     if (freshInstall) {
-      if (passphrase.length < 8) {
-        triggerError("Choose a passphrase with at least 8 characters.");
+      if (passphrase.length < MIN_PASSPHRASE_LENGTH) {
+        triggerError(`Choose a passphrase with at least ${MIN_PASSPHRASE_LENGTH} characters.`);
         setBusy(false);
         return;
       }
@@ -104,6 +110,12 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
             <label htmlFor="passphrase" className="mb-2 block text-sm font-semibold text-slate-700">
               Master Passphrase
             </label>
+            {freshInstall && (
+              <p className="mb-2 text-xs text-slate-500">
+                At least {MIN_PASSPHRASE_LENGTH} characters — a short phrase is stronger than a
+                shorter "complex" password. There's no recovery if you forget it.
+              </p>
+            )}
             <div className="flex gap-2">
               <input
                 id="passphrase"

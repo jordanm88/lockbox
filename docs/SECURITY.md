@@ -71,11 +71,12 @@ like SHA-256.
 **What it does not protect against:**
 
 - **A weak passphrase.** Argon2id makes each guess expensive, but it can't
-  turn a short or guessable passphrase into a strong one. The app currently
-  only enforces an 8-character minimum, which is on the low side — a longer
-  passphrase (or a multi-word passphrase) is the single biggest lever a user
-  has over this vault's real-world security, more so than any parameter in
-  `crypto.rs`.
+  turn a short or guessable passphrase into a strong one. The app enforces a
+  12-character minimum (NIST SP 800-63B / OWASP's widely-cited modern
+  baseline for a sole, no-recovery credential) — but length alone doesn't
+  guarantee unpredictability. A multi-word passphrase is still the single
+  biggest lever a user has over this vault's real-world security, more so
+  than any parameter in `crypto.rs`.
 - **A compromised host machine at the moment of use.** This is an at-rest
   encryption model, not a secure-enclave one. While the vault is unlocked,
   the derived key and decrypted file contents exist in the running process's

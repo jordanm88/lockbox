@@ -8,7 +8,7 @@ import Settings from "./pages/Settings";
 import { lockVault, unlockVault } from "./lib/vaultBridge";
 import { loadCloudConfig, syncVaultNow } from "./lib/cloudSyncBridge";
 import { getErrorMessage } from "./lib/errors";
-import { TabId } from "./types";
+import { AUTO_LOCK_MINUTES, AUTO_LOCK_OPTIONS, AutoLockOption, TabId } from "./types";
 
 function readStoredBoolean(key: string): boolean {
   try {
@@ -27,6 +27,16 @@ function readStoredNumber(key: string, fallback: number): number {
   }
 }
 
+function readStoredAutoLockOption(): AutoLockOption {
+  try {
+    const stored = localStorage.getItem("autoLockOption");
+    if (stored && (AUTO_LOCK_OPTIONS as readonly string[]).includes(stored)) {
+      return stored as AutoLockOption;
+    }
+  } catch {}
+  return "5 minutes";
+}
+
 export default function App() {
   const [unlocked, setUnlocked] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>("vault");
@@ -37,6 +47,15 @@ export default function App() {
   );
   const [lastAutoSyncAt, setLastAutoSyncAt] = useState<string | null>(null);
   const [lastAutoSyncError, setLastAutoSyncError] = useState<string | null>(null);
+
+  const [autoLockOption, setAutoLockOptionState] = useState<AutoLockOption>(readStoredAutoLockOption);
+
+  function setAutoLockOption(next: AutoLockOption) {
+    setAutoLockOptionState(next);
+    try {
+      localStorage.setItem("autoLockOption", next);
+    } catch {}
+  }
 
   function setAutoSyncEnabled(next: boolean) {
     setAutoSyncEnabledState(next);
@@ -103,6 +122,34 @@ export default function App() {
     };
   }, [unlocked, autoSyncEnabled, autoSyncIntervalMinutes]);
 
+  // Locks the vault after N minutes with no mouse/keyboard/scroll activity
+  // anywhere on the page. Lives here (not in Settings) for the same reason
+  // auto-sync does — it has to keep running regardless of which tab is
+  // open, since Settings unmounts the moment you navigate away from it.
+  useEffect(() => {
+    if (!unlocked) return;
+    const minutes = AUTO_LOCK_MINUTES[autoLockOption];
+    if (!minutes) return; // "Never"
+    const lockAfterMs = minutes * 60_000;
+
+    let timer: ReturnType<typeof setTimeout>;
+    function resetTimer() {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        handleLock();
+      }, lockAfterMs);
+    }
+
+    const activityEvents = ["mousemove", "mousedown", "keydown", "wheel", "touchstart", "scroll"] as const;
+    activityEvents.forEach((event) => window.addEventListener(event, resetTimer, { passive: true }));
+    resetTimer();
+
+    return () => {
+      clearTimeout(timer);
+      activityEvents.forEach((event) => window.removeEventListener(event, resetTimer));
+    };
+  }, [unlocked, autoLockOption]);
+
   if (!unlocked) {
     return <LockScreen onUnlock={handleUnlock} />;
   }
@@ -127,7 +174,9 @@ export default function App() {
               lastAutoSyncError={lastAutoSyncError}
             />
           )}
-          {activeTab === "settings" && <Settings onLock={handleLock} />}
+          {activeTab === "settings" && (
+            <Settings onLock={handleLock} autoLockOption={autoLockOption} onChangeAutoLockOption={setAutoLockOption} />
+          )}
         </div>
       </main>
     </div>

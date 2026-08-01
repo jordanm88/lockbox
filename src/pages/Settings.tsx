@@ -3,19 +3,19 @@ import PageHeader from "../components/PageHeader";
 import { useEffect } from "react";
 import { applyPortableUpdate, checkPortableUpdate } from "../lib/updateBridge";
 import { getErrorMessage } from "../lib/errors";
+import { AUTO_LOCK_OPTIONS, AutoLockOption } from "../types";
 import pkg from "../../package.json";
-
-const AUTO_LOCK_OPTIONS = ["1 minute", "5 minutes", "15 minutes", "Never"];
 
 interface SettingsProps {
   onLock: () => void;
+  autoLockOption: AutoLockOption;
+  onChangeAutoLockOption: (option: AutoLockOption) => void;
 }
 
-export default function Settings({ onLock }: SettingsProps) {
+export default function Settings({ onLock, autoLockOption, onChangeAutoLockOption }: SettingsProps) {
   const [currentPass, setCurrentPass] = useState("");
   const [newPass, setNewPass] = useState("");
   const [confirmPass, setConfirmPass] = useState("");
-  const [autoLock, setAutoLock] = useState(AUTO_LOCK_OPTIONS[1]);
   const [autoUpdate, setAutoUpdate] = useState<boolean>(() => {
     try {
       return localStorage.getItem("autoUpdateEnabled") === "true";
@@ -125,8 +125,8 @@ export default function Settings({ onLock }: SettingsProps) {
               <button
                 key={option}
                 type="button"
-                onClick={() => setAutoLock(option)}
-                className={`neo-btn py-3 ${autoLock === option ? "bg-blue-600 text-white" : "bg-paper"}`}
+                onClick={() => onChangeAutoLockOption(option)}
+                className={`neo-btn py-3 ${autoLockOption === option ? "bg-blue-600 text-white" : "bg-paper"}`}
               >
                 {option}
               </button>

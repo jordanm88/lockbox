@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { VaultFileEntry } from "../lib/vaultBridge";
+import { isImageFile } from "../lib/fileKind";
 
 interface Props {
   entries: VaultFileEntry[];
@@ -42,7 +43,7 @@ function fileVisual(name: string, isDir: boolean): FileVisual {
 
   const ext = name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
 
-  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "heic"].includes(ext)) {
+  if (isImageFile(name)) {
     return { icon: "🖼️", bg: "bg-emerald-50", text: "text-emerald-600" };
   }
   if (ext === "pdf") return { icon: "📕", bg: "bg-red-50", text: "text-red-600" };

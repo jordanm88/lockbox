@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "../components/PageHeader";
 import VaultFilePreview from "../components/VaultFilePreview";
 import VaultTreeView from "../components/VaultTreeView";
+import PicturesGrid from "../components/PicturesGrid";
 import NewMenu from "../components/NewMenu";
 import UploadToast from "../components/UploadToast";
+import { isImageFile } from "../lib/fileKind";
 import {
   createFolder,
   encryptAndSaveFile,
@@ -91,6 +93,7 @@ export default function Vault() {
   const [pendingFolders, setPendingFolders] = useState<string[]>([]);
   const [uploadProgress, setUploadProgress] = useState<UploadProgressState | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [sectionView, setSectionView] = useState<"files" | "pictures">("files");
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -507,17 +510,41 @@ export default function Vault() {
     setPreview(null);
   }
 
+  const pictureCount = useMemo(
+    () => files.filter((entry) => !entry.isDir && isImageFile(entry.name)).length,
+    [files],
+  );
+
   return (
     <div className="relative">
       <PageHeader icon="🔐" title="My Vault" subtitle="Files stay encrypted on this drive. Nothing touches the host disk." />
 
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <NewMenu
-          disabled={uploading || pendingUpload.length > 0 || pendingFolders.length > 0}
-          onUploadFiles={() => inputRef.current?.click()}
-          onUploadFolder={() => folderInputRef.current?.click()}
-          onCreateFolder={() => setCreateOpen(true)}
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <NewMenu
+            disabled={uploading || pendingUpload.length > 0 || pendingFolders.length > 0}
+            onUploadFiles={() => inputRef.current?.click()}
+            onUploadFolder={() => folderInputRef.current?.click()}
+            onCreateFolder={() => setCreateOpen(true)}
+          />
+
+          <div className="flex overflow-hidden rounded-full border border-slate-200 bg-white">
+            <button
+              type="button"
+              onClick={() => setSectionView("files")}
+              className={`px-3.5 py-1.5 text-sm font-medium transition ${sectionView === "files" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}
+            >
+              🗂️ All Files
+            </button>
+            <button
+              type="button"
+              onClick={() => setSectionView("pictures")}
+              className={`px-3.5 py-1.5 text-sm font-medium transition ${sectionView === "pictures" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}
+            >
+              🖼️ Pictures{pictureCount > 0 ? ` (${pictureCount})` : ""}
+            </button>
+          </div>
+        </div>
 
         <div className="relative w-full sm:w-72">
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">🔎</span>
@@ -570,6 +597,19 @@ export default function Vault() {
           <p className="font-semibold text-ink">Your vault is empty</p>
           <p className="mt-1 text-sm text-slate-500">Drag files or folders anywhere on this page, or use the "+ New" button above.</p>
         </div>
+      ) : sectionView === "pictures" ? (
+        <PicturesGrid
+          entries={files}
+          searchQuery={searchQuery}
+          onView={handleView}
+          onDelete={requestDelete}
+          onExport={handleExport}
+          selectedPaths={selectedPaths}
+          onToggleSelect={toggleSelect}
+          onSetSelection={setSelection}
+          onBulkExport={handleBulkExport}
+          onBulkDelete={requestBulkDelete}
+        />
       ) : (
         <VaultTreeView
           entries={files}

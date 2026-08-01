@@ -251,22 +251,6 @@
       }
     },
     {
-      "id": "keepass",
-      "name": "KeePass",
-      "description": "Classic Windows password manager storing an encrypted local database file.",
-      "icon": "🗝️",
-      "homepage": "https://keepass.info/",
-      "category": "Security",
-      "targets": {
-        "windows": {
-          "url": "https://sourceforge.net/projects/keepass/files/KeePass%202.x/2.61.1/KeePass-2.61.1.zip/download",
-          "archiveType": "zip",
-          "launcher": "KeePass.exe",
-          "sha256": "3952354db9b117e906f7cd4f9f5591065b95186472370da47f46f3e246fea864"
-        }
-      }
-    },
-    {
       "id": "peazip",
       "name": "PeaZip",
       "description": "Opens, creates, and extracts ZIP, 7z, RAR, and many other archive formats.",

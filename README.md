@@ -75,7 +75,7 @@ The App Store installs portable applications into the USB drive.
 - Uninstall removes that app folder from `Apps/`.
 - Reinstalling an app refreshes its folder from the catalog.
 
-The bundled catalog currently includes 20 apps across Development, Games,
+The bundled catalog currently includes 19 apps across Development, Games,
 Graphics & Pictures, Internet, Multimedia, Office, Security, and Utilities —
 see `src-tauri/resources/catalog.json` for the full, current list.
 

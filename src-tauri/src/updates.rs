@@ -28,6 +28,15 @@ pub struct ApplyUpdateResult {
     message: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReleaseNotes {
+    version: String,
+    name: Option<String>,
+    body: Option<String>,
+    html_url: Option<String>,
+}
+
 // `async` on all three commands below dispatches them off the main thread —
 // see `store_commands::install_app` for the full explanation. Each one does
 // a blocking network call (to GitHub's API, or downloading an entire new
@@ -74,6 +83,27 @@ pub fn check_portable_update(app_handle: AppHandle) -> Result<PortableUpdateInfo
     })
 }
 
+/// Powers the "what's new" popup: fetches release notes for the version
+/// *actually running right now*, not GitHub's latest — those can differ
+/// (this build might already be newer, or the update hasn't landed yet), and
+/// showing notes for a release you don't have yet would be misleading. If
+/// this exact version was never tagged/released (e.g. a local dev build),
+/// the lookup below 404s and the frontend just skips the popup silently —
+/// this is a nice-to-have, not something worth surfacing an error for.
+#[tauri::command(async)]
+pub fn get_current_release_notes(app_handle: AppHandle) -> Result<ReleaseNotes, String> {
+    let repo = read_repo_from_config(&app_handle)?;
+    let current_version = app_handle.package_info().version.to_string();
+    let release = fetch_release_by_tag(&repo, &format!("v{current_version}"))?;
+
+    Ok(ReleaseNotes {
+        version: current_version,
+        name: release.get("name").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        body: release.get("body").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        html_url: release.get("html_url").and_then(|v| v.as_str()).map(|s| s.to_string()),
+    })
+}
+
 #[tauri::command(async)]
 pub fn apply_portable_update(
     app_handle: AppHandle,
@@ -115,13 +145,20 @@ fn read_repo_from_config(app_handle: &AppHandle) -> Result<String, String> {
 }
 
 fn fetch_latest_release(repo: &str) -> Result<Value, String> {
-    let url = format!("https://api.github.com/repos/{}/releases/latest", repo);
+    fetch_release_json(&format!("https://api.github.com/repos/{repo}/releases/latest"))
+}
+
+fn fetch_release_by_tag(repo: &str, tag: &str) -> Result<Value, String> {
+    fetch_release_json(&format!("https://api.github.com/repos/{repo}/releases/tags/{tag}"))
+}
+
+fn fetch_release_json(url: &str) -> Result<Value, String> {
     let client = reqwest::blocking::Client::builder()
         .user_agent("Lockbox-Updater/1.0")
         .build()
         .map_err(|e| e.to_string())?;
     let resp = client
-        .get(&url)
+        .get(url)
         .send()
         .map_err(|e| e.to_string())?
         .error_for_status()

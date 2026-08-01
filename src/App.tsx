@@ -8,12 +8,22 @@ import CloudSync from "./pages/CloudSync";
 import Settings from "./pages/Settings";
 import ConfirmDialog from "./components/ConfirmDialog";
 import UploadToast from "./components/UploadToast";
+import WhatsNewDialog from "./components/WhatsNewDialog";
 import { lockVault, unlockVault } from "./lib/vaultBridge";
 import { loadCloudConfig, syncVaultNow } from "./lib/cloudSyncBridge";
-import { applyPortableUpdate, checkPortableUpdate, PortableUpdateInfo } from "./lib/updateBridge";
+import {
+  applyPortableUpdate,
+  checkPortableUpdate,
+  getCurrentReleaseNotes,
+  PortableUpdateInfo,
+  ReleaseNotes,
+} from "./lib/updateBridge";
 import { FileWithPath, runUpload, UploadProgressState } from "./lib/uploadManager";
 import { getErrorMessage } from "./lib/errors";
 import { AUTO_LOCK_MINUTES, AUTO_LOCK_OPTIONS, AutoLockOption, TabId } from "./types";
+import pkg from "../package.json";
+
+const LAST_SEEN_RELEASE_KEY = "lastSeenReleaseVersion";
 
 // How often to re-check for updates in the background while the app stays
 // open and unlocked. "Later" on the update prompt doesn't set its own timer
@@ -66,6 +76,8 @@ export default function App() {
   // and auto-lock above.
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<UploadProgressState | null>(null);
+
+  const [whatsNew, setWhatsNew] = useState<ReleaseNotes | null>(null);
 
   const [autoLockOption, setAutoLockOptionState] = useState<AutoLockOption>(readStoredAutoLockOption);
 
@@ -268,6 +280,44 @@ export default function App() {
     } catch {}
   }
 
+  // Shows a one-time "what's new" popup the first time a new version of
+  // Lockbox actually runs — compares the build's own version (not GitHub's
+  // latest, which check_portable_update already handles separately) against
+  // the last version this popup was shown for, stored on the host the same
+  // way every other UI preference here is (autoLockOption, etc.).
+  useEffect(() => {
+    if (!unlocked) return;
+    let cancelled = false;
+
+    (async () => {
+      let lastSeen: string | null = null;
+      try {
+        lastSeen = localStorage.getItem(LAST_SEEN_RELEASE_KEY);
+      } catch {}
+      if (lastSeen === pkg.version) return;
+
+      try {
+        const notes = await getCurrentReleaseNotes();
+        if (!cancelled) setWhatsNew(notes);
+      } catch {
+        // No tagged release for this exact version yet (a local dev build,
+        // or the release just hasn't published), or no network — either
+        // way this is a nice-to-have, not worth surfacing as an error.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [unlocked]);
+
+  function dismissWhatsNew() {
+    try {
+      localStorage.setItem(LAST_SEEN_RELEASE_KEY, pkg.version);
+    } catch {}
+    setWhatsNew(null);
+  }
+
   // Background update checks: immediately on unlock, then on a recurring
   // schedule. Lives here (not Settings) so the schedule keeps running
   // regardless of which tab is open, same reasoning as auto-sync/auto-lock.
@@ -391,6 +441,8 @@ export default function App() {
       />
 
       <UploadToast progress={uploadProgress} onDismiss={() => setUploadProgress(null)} />
+
+      <WhatsNewDialog release={whatsNew} onDismiss={dismissWhatsNew} />
     </div>
   );
 }

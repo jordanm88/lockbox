@@ -16,8 +16,20 @@ export interface ApplyUpdateResult {
   message: string;
 }
 
+export interface ReleaseNotes {
+  version: string;
+  name: string | null;
+  body: string | null;
+  htmlUrl: string | null;
+}
+
 export function getLatestRelease(): Promise<ReleaseInfo> {
   return invoke<ReleaseInfo>("get_latest_release", {});
+}
+
+/** Release notes for the version actually running right now — see the Rust command's doc comment for why this isn't just "the latest release." */
+export function getCurrentReleaseNotes(): Promise<ReleaseNotes> {
+  return invoke<ReleaseNotes>("get_current_release_notes");
 }
 
 export function checkPortableUpdate(): Promise<PortableUpdateInfo> {

@@ -508,8 +508,17 @@ export default function Vault({ uploading, onStartUpload }: VaultProps) {
           accept={sectionView === "pictures" ? IMAGE_ACCEPT : undefined}
           className="hidden"
           onChange={async (event) => {
+            // The DOM spec only guarantees `currentTarget` is set while the
+            // event is actively dispatching — it's nulled out again once
+            // dispatch finishes, which (for an async handler) happens at the
+            // first `await`. Capturing the element synchronously first,
+            // rather than reading `event.currentTarget` after the await,
+            // avoids clearing `.value` on a null reference — which silently
+            // left the input non-empty, so re-selecting the exact same file
+            // right after wouldn't even fire a new change event.
+            const input = event.currentTarget;
             await handleFilesChosen(event.target.files);
-            event.currentTarget.value = "";
+            input.value = "";
           }}
         />
         <input
@@ -519,8 +528,9 @@ export default function Vault({ uploading, onStartUpload }: VaultProps) {
           className="hidden"
           {...({ webkitdirectory: "", directory: "" } as unknown as Record<string, unknown>)}
           onChange={async (event) => {
+            const input = event.currentTarget;
             await handleFilesChosen(event.target.files);
-            event.currentTarget.value = "";
+            input.value = "";
           }}
         />
       </div>

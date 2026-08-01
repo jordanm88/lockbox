@@ -66,6 +66,15 @@ export default function Sidebar({ activeTab, onSelectTab, onLock }: SidebarProps
 
       <div className="shrink-0 border-t border-slate-200">
         <StorageMeter />
+        <div className="px-4 pt-3">
+          <button
+            type="button"
+            onClick={() => window.open("https://www.paypal.com/paypalme/jord4nm88", "_blank")}
+            className="flex w-full items-center justify-center gap-1.5 rounded-full border border-dashed border-amber-200 bg-amber-50 py-2 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100"
+          >
+            💛 Fund the project
+          </button>
+        </div>
         {ejectStatus && (
           <p className="mx-4 mt-2 rounded-lg bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">
             {ejectStatus}

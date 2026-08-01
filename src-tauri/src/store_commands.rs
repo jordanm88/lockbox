@@ -114,15 +114,37 @@ pub fn install_app(
     result
 }
 
-#[tauri::command]
+// `async`: `launch_from` below can now retry for over a second on a
+// transient file lock (see its comment) — see `install_app` above for why a
+// plain `fn` would otherwise block the main thread for that whole retry
+// window.
+#[tauri::command(async)]
 pub fn launch_portable_app(state: State<AppState>, app_path: String) -> Result<(), String> {
     launch_from(&usb_root::apps_dir(&state.root), &app_path)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn launch_third_party_app(state: State<AppState>, app_path: String) -> Result<(), String> {
     launch_from(&usb_root::third_party_apps_dir(&state.root), &app_path)
 }
+
+/// Windows error 32 (`ERROR_SHARING_VIOLATION`) — the file exists and is
+/// valid, but something else currently has it open in a way that conflicts
+/// with launching it.
+const ERROR_SHARING_VIOLATION: i32 = 32;
+
+/// A handful of retries with a short backoff, specifically for
+/// `ERROR_SHARING_VIOLATION` on the very first launch after installing an
+/// app. That error is almost always transient here: Windows Defender (or
+/// another AV product) real-time-scans a freshly-extracted .exe the first
+/// time anything tries to open it, and briefly holds a lock that makes
+/// `CreateProcess` fail as if the file were in use — even though nothing in
+/// Lockbox itself is still holding it open. Retrying rides out that window
+/// instead of surfacing a permanent-looking error for what's actually a
+/// one-off timing race (this is exactly what VS Code's ~335MB archive with
+/// thousands of files hits almost every time on a fresh install).
+const LAUNCH_RETRY_ATTEMPTS: u32 = 6;
+const LAUNCH_RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(400);
 
 fn launch_from(base_dir: &Path, app_path: &str) -> Result<(), String> {
     let resolved = paths::safe_join(base_dir, app_path)?;
@@ -132,12 +154,27 @@ fn launch_from(base_dir: &Path, app_path: &str) -> Result<(), String> {
     }
 
     let working_dir = resolved.parent().unwrap_or(base_dir);
-    std::process::Command::new(&resolved)
-        .current_dir(working_dir)
-        .spawn()
-        .map_err(|e| format!("failed to launch '{app_path}': {e}"))?;
 
-    Ok(())
+    let mut last_error = None;
+    for attempt in 0..LAUNCH_RETRY_ATTEMPTS {
+        match std::process::Command::new(&resolved).current_dir(working_dir).spawn() {
+            Ok(_) => return Ok(()),
+            Err(e) => {
+                let is_last_attempt = attempt + 1 == LAUNCH_RETRY_ATTEMPTS;
+                if e.raw_os_error() != Some(ERROR_SHARING_VIOLATION) || is_last_attempt {
+                    last_error = Some(e);
+                    break;
+                }
+                std::thread::sleep(LAUNCH_RETRY_DELAY);
+                last_error = Some(e);
+            }
+        }
+    }
+
+    Err(format!(
+        "failed to launch '{app_path}': {}",
+        last_error.expect("loop always runs at least once and sets this on every non-return path")
+    ))
 }
 
 /// Filename fragments that mark an .exe as a helper/uninstaller/updater

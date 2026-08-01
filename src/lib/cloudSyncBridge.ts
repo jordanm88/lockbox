@@ -35,6 +35,8 @@ export interface RcloneOutputLine {
 export interface SyncFinished {
   success: boolean;
   code: number | null;
+  /** True when nothing was transferred because the vault and remote were both empty. */
+  skipped: boolean;
 }
 
 export interface TestFinished {

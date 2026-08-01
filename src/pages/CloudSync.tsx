@@ -14,7 +14,7 @@ import {
 } from "../lib/cloudSyncBridge";
 
 type Provider = CloudRemoteConfig["provider"];
-type SyncStatus = "idle" | "running" | "success" | "failed";
+type SyncStatus = "idle" | "running" | "success" | "skipped" | "failed";
 
 interface CloudSyncProps {
   autoSyncEnabled: boolean;
@@ -90,6 +90,7 @@ function StatusBadge({ status }: { status: SyncStatus }) {
     idle: { label: "Never synced", className: "bg-slate-100 text-slate-600" },
     running: { label: "Syncing…", className: "bg-amber-100 text-amber-700" },
     success: { label: "✓ Synced", className: "bg-emerald-100 text-emerald-700" },
+    skipped: { label: "⚠ Nothing to sync", className: "bg-amber-100 text-amber-700" },
     failed: { label: "✗ Failed", className: "bg-red-100 text-red-700" },
   };
   const { label, className } = variants[status];
@@ -129,7 +130,7 @@ export default function CloudSync({
       setOutput((current) => [...current, line.line]);
     });
     const finishedUnlisten = onSyncFinished((result) => {
-      setSyncStatus(result.success ? "success" : "failed");
+      setSyncStatus(result.skipped ? "skipped" : result.success ? "success" : "failed");
     });
     const testFinishedUnlisten = onTestFinished((result) => {
       setTesting(false);
@@ -346,6 +347,12 @@ export default function CloudSync({
             <p className="text-sm font-semibold text-slate-600">Status</p>
             <StatusBadge status={syncStatus} />
           </div>
+          {syncStatus === "skipped" && (
+            <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+              Nothing was transferred — both the vault and the remote destination are empty, so
+              there was nothing to copy. This is not the same as a completed backup.
+            </p>
+          )}
 
           <button
             type="button"

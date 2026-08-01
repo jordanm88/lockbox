@@ -26,6 +26,13 @@ struct RcloneOutputLine {
 struct SyncFinished {
     success: bool,
     code: Option<i32>,
+    /// True when nothing was actually transferred because the vault and
+    /// remote were both empty — `rclone sync` never ran at all. Without
+    /// this, "skipped, nothing to do" and "actually copied files" were
+    /// indistinguishable to the UI: both just resolved the same Ok(()),
+    /// which is exactly the "it says it worked but nothing showed up at the
+    /// destination" failure mode this field exists to rule out.
+    skipped: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -87,6 +94,14 @@ pub async fn run_rclone_sync(
                 line: "Vault and remote path are both empty. Skipping sync as no data needs transfer.".to_string(),
             },
         );
+        let _ = app_handle.emit(
+            "rclone-sync-finished",
+            SyncFinished {
+                success: true,
+                code: None,
+                skipped: true,
+            },
+        );
         return Ok(());
     }
 
@@ -132,6 +147,7 @@ pub async fn run_rclone_sync(
         SyncFinished {
             success: status.success(),
             code: status.code(),
+            skipped: false,
         },
     );
 

@@ -131,7 +131,7 @@ fn save_encrypted_file(
     let mut index = load_or_upgrade_index(vault_dir, key)?;
 
     let saved_relative = unique_original_path(&index, &normalized_dest);
-    ensure_parent_directories(&mut index, &saved_relative);
+    ensure_parent_directories(&mut index, &saved_relative)?;
 
     let data_dir = ensure_data_dir(vault_dir)?;
     let blob_name = unique_blob_name(&data_dir)?;
@@ -246,7 +246,7 @@ fn unique_original_path(index: &VaultIndex, requested: &str) -> String {
     panic!("too many duplicate paths")
 }
 
-fn ensure_parent_directories(index: &mut VaultIndex, path: &str) {
+fn ensure_parent_directories(index: &mut VaultIndex, path: &str) -> Result<(), String> {
     let mut current = Path::new(path);
     let mut pending = Vec::new();
 
@@ -261,15 +261,33 @@ fn ensure_parent_directories(index: &mut VaultIndex, path: &str) {
 
     pending.reverse();
     for dir in pending {
-        if !index.entries.iter().any(|entry| entry.original_path == dir) {
-            index.entries.push(VaultIndexEntry {
+        match index.entries.iter().find(|entry| entry.original_path == dir) {
+            // A previous call already created this ancestor as a directory
+            // — nothing to do.
+            Some(entry) if entry.is_dir => {}
+            // Something already occupies this path and it's a *file*, not
+            // a directory — proceeding would leave the index internally
+            // inconsistent (a "file" entry with children nested under it),
+            // which is exactly what previously let a folder silently end up
+            // mis-marked as `is_dir: false` and made unreachable except by
+            // hitting "path is a directory" when something tried to open
+            // it. Fail loudly here instead, before any inconsistency can be
+            // written to disk.
+            Some(_) => {
+                return Err(format!(
+                    "cannot create folder '{dir}': a file with that name already exists"
+                ));
+            }
+            None => index.entries.push(VaultIndexEntry {
                 original_path: dir,
                 blob_name: None,
                 is_dir: true,
                 size: None,
-            });
+            }),
         }
     }
+
+    Ok(())
 }
 
 // pub(crate) so rclone.rs's pre-sync "is the vault actually empty" check can
@@ -305,11 +323,48 @@ fn unique_blob_name(data_dir: &Path) -> Result<String, String> {
 
 fn load_or_upgrade_index(vault_dir: &Path, key: &crypto::VaultKey) -> Result<VaultIndex, String> {
     let mut index = load_index(vault_dir, key)?;
+    let mut needs_save = false;
+
     if index.entries.is_empty() && has_plaintext_vault_data(vault_dir)? {
         migrate_plaintext_vault(vault_dir, key, &mut index)?;
+        needs_save = true;
+    }
+
+    // Self-heal any pre-existing duplicate `original_path` entries (e.g.
+    // one file and one folder sharing a name from an older bug) instead of
+    // silently carrying them forward on every load. Keeping the *last*
+    // occurrence matches `get_entry_for_path` below and the frontend's own
+    // `Map`-based lookup (later entries win when built from an array via
+    // `new Map(...)`), so backend and frontend always agree on which entry
+    // a given path actually refers to — without this, the two could resolve
+    // the same clicked row to two different entries (e.g. the UI treating a
+    // path as a folder while the backend resolves an older, stale file
+    // entry for the same name, or vice versa), which is exactly what
+    // produced "path is a directory" for what looked like a normal folder.
+    if dedupe_entries(&mut index) {
+        needs_save = true;
+    }
+
+    if needs_save {
         save_index(vault_dir, key, &index)?;
     }
+
     Ok(index)
+}
+
+/// Removes duplicate `original_path` entries, keeping the last occurrence
+/// of each. Returns true if anything was actually removed.
+fn dedupe_entries(index: &mut VaultIndex) -> bool {
+    let mut seen = std::collections::HashSet::new();
+    let mut keep = vec![false; index.entries.len()];
+    for (i, entry) in index.entries.iter().enumerate().rev() {
+        keep[i] = seen.insert(entry.original_path.clone());
+    }
+
+    let original_len = index.entries.len();
+    let mut kept_iter = keep.into_iter();
+    index.entries.retain(|_| kept_iter.next().unwrap_or(true));
+    index.entries.len() != original_len
 }
 
 fn has_plaintext_vault_data(vault_dir: &Path) -> Result<bool, String> {
@@ -606,7 +661,7 @@ pub fn create_folder(state: State<AppState>, relative_path: String) -> Result<()
         return Err("file already exists with that name".to_string());
     }
 
-    ensure_parent_directories(&mut index, &normalized);
+    ensure_parent_directories(&mut index, &normalized)?;
     index.entries.push(VaultIndexEntry {
         original_path: normalized,
         blob_name: None,

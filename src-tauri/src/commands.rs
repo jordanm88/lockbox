@@ -6,7 +6,18 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::State;
 
+// `rename_all = "camelCase"` is load-bearing here, not cosmetic: the
+// frontend's matching `VaultFileEntry` interface (vaultBridge.ts) declares
+// `isDir`, and without this attribute serde emits the field as `is_dir`
+// (Rust's own naming), which the frontend then never sees — `entry.isDir`
+// silently reads as `undefined` or every single entry, folder or file
+// alike. That's indistinguishable from `false` in every place this gets
+// checked (icon, "Open" vs "View", click routing), so every folder rendered
+// and behaved exactly like a file — this one missing attribute was the
+// entire "folders act like files" bug, not the index-corruption theory
+// earlier fixes here were chasing.
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct VaultFileEntry {
     name: String,
     size: u64,

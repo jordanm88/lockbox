@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import PageHeader from "../components/PageHeader";
 import ActionButton from "../components/ActionButton";
+import LaunchOverlay from "../components/LaunchOverlay";
 import { getErrorMessage } from "../lib/errors";
 import { launchThirdPartyApp, scanThirdPartyApps, ThirdPartyApp } from "../lib/appStoreBridge";
 
@@ -20,7 +21,8 @@ export default function ThirdPartyApps() {
   const [apps, setApps] = useState<ThirdPartyApp[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [launchingId, setLaunchingId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [launchingApp, setLaunchingApp] = useState<ThirdPartyApp | null>(null);
 
   async function refresh() {
     try {
@@ -33,6 +35,12 @@ export default function ThirdPartyApps() {
     }
   }
 
+  async function handleRefresh() {
+    setRefreshing(true);
+    await refresh();
+    setRefreshing(false);
+  }
+
   useEffect(() => {
     refresh();
     const timer = setInterval(refresh, RESCAN_MS);
@@ -41,24 +49,29 @@ export default function ThirdPartyApps() {
 
   async function handleLaunch(app: ThirdPartyApp) {
     if (!app.launcherPath) return;
-    setLaunchingId(app.id);
+    setLaunchingApp(app);
     setError(null);
     try {
       await launchThirdPartyApp(app.launcherPath);
     } catch (err) {
       setError(getErrorMessage(err, `Failed to launch ${app.name}.`));
     } finally {
-      setLaunchingId(null);
+      setLaunchingApp(null);
     }
   }
 
   return (
     <div>
-      <PageHeader
-        icon="📦"
-        title="Third Party Apps"
-        subtitle="Portable apps you add to the drive yourself, kept separate from the App Store catalog."
-      />
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <PageHeader
+          icon="📦"
+          title="Third Party Apps"
+          subtitle="Portable apps you add to the drive yourself, kept separate from the App Store catalog."
+        />
+        <ActionButton type="button" onClick={handleRefresh} disabled={refreshing} className="shrink-0">
+          {refreshing ? "Refreshing…" : "🔄 Refresh"}
+        </ActionButton>
+      </div>
 
       <div className="neo-panel mb-6 bg-white p-5">
         <h3 className="mb-3 text-base font-bold text-ink">How this works</h3>
@@ -136,15 +149,17 @@ export default function ThirdPartyApps() {
               <ActionButton
                 type="button"
                 onClick={() => handleLaunch(app)}
-                disabled={!app.launcherPath || launchingId === app.id}
+                disabled={!app.launcherPath || launchingApp?.id === app.id}
                 variant="primary"
               >
-                {launchingId === app.id ? "Launching…" : "▶ Launch"}
+                {launchingApp?.id === app.id ? "Launching…" : "▶ Launch"}
               </ActionButton>
             </div>
           ))}
         </div>
       )}
+
+      <LaunchOverlay appName={launchingApp?.name ?? null} />
     </div>
   );
 }

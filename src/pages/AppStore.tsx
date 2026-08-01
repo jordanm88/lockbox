@@ -3,6 +3,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import PageHeader from "../components/PageHeader";
 import ActionButton from "../components/ActionButton";
 import ConfirmDialog from "../components/ConfirmDialog";
+import LaunchOverlay from "../components/LaunchOverlay";
 import pkg from "../../package.json";
 import { getErrorMessage } from "../lib/errors";
 import {
@@ -36,6 +37,8 @@ export default function AppStore() {
   const [installingIds, setInstallingIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState(ALL_CATEGORY);
+  const [refreshing, setRefreshing] = useState(false);
+  const [launchingApp, setLaunchingApp] = useState<CatalogEntry | null>(null);
 
   async function refresh() {
     try {
@@ -46,6 +49,12 @@ export default function AppStore() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    await refresh();
+    setRefreshing(false);
   }
 
   useEffect(() => {
@@ -140,10 +149,13 @@ export default function AppStore() {
   async function handleLaunch(entry: CatalogEntry) {
     if (!entry.launcherPath) return;
     setError(null);
+    setLaunchingApp(entry);
     try {
       await launchPortableApp(entry.launcherPath);
     } catch (err) {
       setError(getErrorMessage(err, `Failed to launch ${entry.name}.`));
+    } finally {
+      setLaunchingApp(null);
     }
   }
 
@@ -190,6 +202,9 @@ export default function AppStore() {
         <p className="shrink-0 text-sm font-semibold text-slate-600">
           {installedCount} of {apps.length} installed
         </p>
+        <ActionButton type="button" onClick={handleRefresh} disabled={refreshing} className="shrink-0">
+          {refreshing ? "Refreshing…" : "🔄 Refresh"}
+        </ActionButton>
       </div>
 
       <div className="mb-6 flex flex-wrap gap-2">
@@ -282,8 +297,13 @@ export default function AppStore() {
                     </ActionButton>
                   ) : app.installed ? (
                     <>
-                      <ActionButton type="button" onClick={() => handleLaunch(app)} variant="primary">
-                        ▶ Launch
+                      <ActionButton
+                        type="button"
+                        onClick={() => handleLaunch(app)}
+                        disabled={launchingApp?.id === app.id}
+                        variant="primary"
+                      >
+                        {launchingApp?.id === app.id ? "Launching…" : "▶ Launch"}
                       </ActionButton>
                       <ActionButton type="button" onClick={() => requestUninstall(app)}>
                         🗑 Uninstall
@@ -342,6 +362,8 @@ export default function AppStore() {
       <footer className="mt-8 text-center text-sm text-slate-600">
         Version {pkg.version} · Portable binary: Lockbox
       </footer>
+
+      <LaunchOverlay appName={launchingApp?.name ?? null} />
     </div>
   );
 }

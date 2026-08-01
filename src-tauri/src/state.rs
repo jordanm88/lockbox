@@ -5,6 +5,10 @@ use std::sync::{Mutex, MutexGuard};
 
 pub struct AppState {
     pub root: PathBuf,
+    /// Held only for its Drop impl — releases the exclusive instance lock
+    /// acquired in `usb_root::acquire_instance_lock` when the app exits.
+    /// Never read otherwise.
+    pub _instance_lock: std::fs::File,
     pub vault_key: Mutex<Option<VaultKey>>,
     /// App IDs currently mid-install, so a second `install_app` call for the
     /// same app is rejected instead of racing the first one over the same

@@ -9,15 +9,20 @@ interface SidebarProps {
 
 export default function Sidebar({ activeTab, onSelectTab, onLock }: SidebarProps) {
   return (
-    <aside className="flex min-h-screen w-64 shrink-0 flex-col border-r border-slate-200 bg-white">
-      <div className="flex items-center gap-2.5 px-5 py-5">
+    // h-full + overflow-hidden pins the sidebar to exactly the viewport
+    // height its flex parent gives it, regardless of window size; the nav
+    // list scrolls internally (rather than the whole sidebar) if it's ever
+    // taller than the available space, so the header and footer (lock
+    // button, storage meter) stay pinned and visible.
+    <aside className="flex h-full w-64 shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white">
+      <div className="flex shrink-0 items-center gap-2.5 px-5 py-5">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-lg text-white shadow-sm">
           🔒
         </div>
         <span className="text-lg font-bold tracking-tight text-ink">Lockbox</span>
       </div>
 
-      <nav className="flex flex-1 flex-col gap-0.5 px-3">
+      <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3">
         {NAV_ITEMS.map((item) => {
           const isActive = item.id === activeTab;
           return (
@@ -36,7 +41,7 @@ export default function Sidebar({ activeTab, onSelectTab, onLock }: SidebarProps
         })}
       </nav>
 
-      <div className="border-t border-slate-200">
+      <div className="shrink-0 border-t border-slate-200">
         <StorageMeter />
         <div className="px-4 pb-4 pt-1">
           <button

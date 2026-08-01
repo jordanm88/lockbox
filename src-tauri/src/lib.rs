@@ -21,11 +21,16 @@ pub fn run() {
         Ok(root) => root,
         Err(e) => fatal_startup_error(&format!("Failed to resolve the USB drive layout: {e}")),
     };
+    let instance_lock = match usb_root::acquire_instance_lock(&root) {
+        Ok(lock) => lock,
+        Err(e) => fatal_startup_error(&format!("{e}")),
+    };
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
             root,
+            _instance_lock: instance_lock,
             vault_key: Mutex::new(None),
             installing_apps: Mutex::new(HashSet::new()),
             sync_in_progress: Mutex::new(false),

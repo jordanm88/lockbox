@@ -108,27 +108,28 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-transparent">
-      <div className="flex min-h-screen">
-        <Sidebar activeTab={activeTab} onSelectTab={setActiveTab} onLock={handleLock} />
-        <main className="flex-1 overflow-y-auto p-6 lg:p-8">
-          <div className="mx-auto w-full max-w-7xl">
-            {activeTab === "vault" && <Vault />}
-            {activeTab === "appstore" && <AppStore />}
-            {activeTab === "cloudsync" && (
-              <CloudSync
-                autoSyncEnabled={autoSyncEnabled}
-                onToggleAutoSync={setAutoSyncEnabled}
-                autoSyncIntervalMinutes={autoSyncIntervalMinutes}
-                onChangeAutoSyncInterval={setAutoSyncIntervalMinutes}
-                lastAutoSyncAt={lastAutoSyncAt}
-                lastAutoSyncError={lastAutoSyncError}
-              />
-            )}
-            {activeTab === "settings" && <Settings onLock={handleLock} />}
-          </div>
-        </main>
-      </div>
+    // Fixed to the viewport height (not min-h-screen) so the sidebar and
+    // main content scroll independently instead of the whole page scrolling
+    // together — otherwise a tall page pushes the sidebar itself off-screen.
+    <div className="flex h-screen overflow-hidden bg-transparent">
+      <Sidebar activeTab={activeTab} onSelectTab={setActiveTab} onLock={handleLock} />
+      <main className="flex-1 overflow-y-auto p-6 lg:p-8">
+        <div className="mx-auto w-full max-w-7xl">
+          {activeTab === "vault" && <Vault />}
+          {activeTab === "appstore" && <AppStore />}
+          {activeTab === "cloudsync" && (
+            <CloudSync
+              autoSyncEnabled={autoSyncEnabled}
+              onToggleAutoSync={setAutoSyncEnabled}
+              autoSyncIntervalMinutes={autoSyncIntervalMinutes}
+              onChangeAutoSyncInterval={setAutoSyncIntervalMinutes}
+              lastAutoSyncAt={lastAutoSyncAt}
+              lastAutoSyncError={lastAutoSyncError}
+            />
+          )}
+          {activeTab === "settings" && <Settings onLock={handleLock} />}
+        </div>
+      </main>
     </div>
   );
 }

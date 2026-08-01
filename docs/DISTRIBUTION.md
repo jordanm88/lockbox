@@ -119,6 +119,28 @@ Cloud Sync will not work until that binary exists on the USB drive.
 > Lockbox executable or app bundle itself. User data and installed apps are
 > left intact.
 
+## 2b. Running from a cloud-synced folder instead of a USB drive
+
+Lockbox never assumes it's actually on removable media — at startup it just
+resolves `USB_ROOT` as *whatever directory the executable currently lives
+in* (`current_exe()`'s parent) and creates `Vault/`, `Apps/`, `Tools/` next
+to it if they don't already exist. That means the exact same portable build
+works if you drop it into a Dropbox, OneDrive, Google Drive, or iCloud Drive
+folder instead of onto a USB stick — the drive is only ever a convenience,
+never a requirement. Use whichever fits: a physical drive for carrying the
+vault between machines by hand, or a synced folder for it to follow you
+automatically.
+
+One thing changes with a synced folder that doesn't apply to a USB stick:
+it's now much easier to end up with the *same* vault open on two machines at
+once (e.g. a laptop and a desktop both syncing the same folder, one of them
+left open from yesterday). Lockbox guards against that with an exclusive
+lock file at `Vault/.lockbox/instance.lock`, acquired once at startup and
+held for the process's lifetime — a second instance pointed at the same
+`Vault/` fails to start with a clear "already open elsewhere" error instead
+of silently racing the first instance and corrupting or losing data. Close
+the other instance first, let it fully sync, then relaunch.
+
 ## 3. Bypassing host OS security flags
 
 All three OSes treat an unsigned executable arriving from removable media

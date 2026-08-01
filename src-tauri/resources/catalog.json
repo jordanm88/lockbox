@@ -121,6 +121,198 @@
           "launcher": "KeePassXC.exe"
         }
       }
+    },
+    {
+      "id": "sublime-text",
+      "name": "Sublime Text",
+      "description": "Fast, minimal text and code editor distributed as a plain zip with no installer.",
+      "icon": "🗒️",
+      "homepage": "https://www.sublimetext.com/",
+      "category": "Development",
+      "targets": {
+        "windows": {
+          "url": "https://download.sublimetext.com/sublime_text_build_4200_x64.zip",
+          "archiveType": "zip",
+          "launcher": "sublime_text.exe",
+          "sha256": "d20456bbefcd626c7c89a4a2e95c326a0c570df2fd7626fc35091e43ae5bff9f"
+        }
+      }
+    },
+    {
+      "id": "heidisql",
+      "name": "HeidiSQL",
+      "description": "Lightweight client for managing MySQL, MariaDB, PostgreSQL, and MSSQL databases.",
+      "icon": "🐬",
+      "homepage": "https://www.heidisql.com/",
+      "category": "Development",
+      "targets": {
+        "windows": {
+          "url": "https://github.com/HeidiSQL/HeidiSQL/releases/download/v12.20/HeidiSQL_12.20_64_Portable.zip",
+          "archiveType": "zip",
+          "launcher": "heidisql.exe",
+          "sha256": "d84742736e4508c206c28c58018bbd934319c941dc9d68ff4673737a3f4df731"
+        }
+      }
+    },
+    {
+      "id": "winmerge-portable",
+      "name": "WinMerge Portable",
+      "description": "Compares and merges files and folders, showing differences side by side.",
+      "icon": "🔀",
+      "homepage": "https://winmerge.org/",
+      "category": "Development",
+      "targets": {
+        "windows": {
+          "url": "https://github.com/WinMerge/winmerge/releases/download/v2.16.58/winmerge-2.16.58-x64-exe.zip",
+          "archiveType": "zip",
+          "launcher": "WinMerge/WinMergeU.exe",
+          "sha256": "58a0e36abc99b0da539d3b33b1df8a494239d53900f1ab57c305853df5da94a6"
+        }
+      }
+    },
+    {
+      "id": "minetest",
+      "name": "Minetest (Luanti)",
+      "description": "Open-source voxel sandbox game engine for building and playing block-based worlds.",
+      "icon": "⛏️",
+      "homepage": "https://www.luanti.org/",
+      "category": "Games",
+      "targets": {
+        "windows": {
+          "url": "https://github.com/luanti-org/luanti/releases/download/5.16.1/luanti-5.16.1-win64.zip",
+          "archiveType": "zip",
+          "launcher": "luanti-5.16.1-win64/bin/luanti.exe",
+          "sha256": "a70fd87e67cc236f250fca90e5cd30211f3e45937b107158b5367d6ee26aabb8"
+        }
+      }
+    },
+    {
+      "id": "imageglass",
+      "name": "ImageGlass",
+      "description": "Fast, lightweight image viewer that supports a huge range of formats.",
+      "icon": "🖼️",
+      "homepage": "https://imageglass.org/",
+      "category": "Graphics & Pictures",
+      "targets": {
+        "windows": {
+          "url": "https://github.com/d2phap/ImageGlass/releases/download/9.6.0.801/ImageGlass_9.6.0.801_x64.zip",
+          "archiveType": "zip",
+          "launcher": "ImageGlass_x64/ImageGlass.exe",
+          "sha256": "65e1d78e17cbdc9fb265ff390f21e12c0314c5bacaa5c7c53aaf98a124876053"
+        }
+      }
+    },
+    {
+      "id": "putty",
+      "name": "PuTTY",
+      "description": "Standalone SSH and telnet client, a single executable with no installation required.",
+      "icon": "💻",
+      "homepage": "https://www.putty.org/",
+      "category": "Internet",
+      "targets": {
+        "windows": {
+          "url": "https://the.earth.li/~sgtatham/putty/latest/w64/putty.exe",
+          "archiveType": "binary",
+          "launcher": "putty.exe",
+          "sha256": "7056ca2f6a9f3c525845b116c7bf564ced3284a4083ea80d7e9ef51a16f612c4"
+        }
+      }
+    },
+    {
+      "id": "handbrake",
+      "name": "HandBrake",
+      "description": "Converts video from almost any format into modern, widely compatible codecs.",
+      "icon": "🎞️",
+      "homepage": "https://handbrake.fr/",
+      "category": "Multimedia",
+      "targets": {
+        "windows": {
+          "url": "https://github.com/HandBrake/HandBrake/releases/download/1.11.2/HandBrake-1.11.2-x86_64-Win_GUI.zip",
+          "archiveType": "zip",
+          "launcher": "HandBrake/HandBrake.exe",
+          "sha256": "a8b9e38b085da2ed7309868bdf8b49a900453946d25d58612071957f21eebd27"
+        }
+      }
+    },
+    {
+      "id": "focuswriter",
+      "name": "FocusWriter",
+      "description": "Distraction-free, full-screen word processor for writers.",
+      "icon": "✍️",
+      "homepage": "https://gottcode.org/focuswriter/",
+      "category": "Office",
+      "targets": {
+        "windows": {
+          "url": "https://gottcode.org/focuswriter/download/?os=windowsportable",
+          "archiveType": "zip",
+          "launcher": "FocusWriter.exe",
+          "sha256": "4c208dc7dc1e456521409ebc814b21eb80b91ea76379b0182eab498bed1913df"
+        }
+      }
+    },
+    {
+      "id": "keepass",
+      "name": "KeePass",
+      "description": "Classic Windows password manager storing an encrypted local database file.",
+      "icon": "🗝️",
+      "homepage": "https://keepass.info/",
+      "category": "Security",
+      "targets": {
+        "windows": {
+          "url": "https://sourceforge.net/projects/keepass/files/KeePass%202.x/2.61.1/KeePass-2.61.1.zip/download",
+          "archiveType": "zip",
+          "launcher": "KeePass.exe",
+          "sha256": "3952354db9b117e906f7cd4f9f5591065b95186472370da47f46f3e246fea864"
+        }
+      }
+    },
+    {
+      "id": "peazip",
+      "name": "PeaZip",
+      "description": "Opens, creates, and extracts ZIP, 7z, RAR, and many other archive formats.",
+      "icon": "🗜️",
+      "homepage": "https://peazip.github.io/",
+      "category": "Utilities",
+      "targets": {
+        "windows": {
+          "url": "https://github.com/peazip/PeaZip/releases/download/11.2.0/peazip_portable-11.2.0.WIN64.zip",
+          "archiveType": "zip",
+          "launcher": "peazip_portable-11.2.0.WIN64/peazip.exe",
+          "sha256": "fb5c555b470c15e461171a8a0172c2a794f0fb510113440927049815f4f8e546"
+        }
+      }
+    },
+    {
+      "id": "cpu-z",
+      "name": "CPU-Z",
+      "description": "Reports detailed CPU, motherboard, memory, and GPU information.",
+      "icon": "🔬",
+      "homepage": "https://www.cpuid.com/softwares/cpu-z.html",
+      "category": "Utilities",
+      "targets": {
+        "windows": {
+          "url": "https://download.cpuid.com/cpu-z/cpu-z_2.20.2-en.zip",
+          "archiveType": "zip",
+          "launcher": "cpuz_x64.exe",
+          "sha256": "320e073a6f387464ac3faac5f010b5fe70e31fab30745883d023c8372e80f3c5"
+        }
+      }
+    },
+    {
+      "id": "rufus",
+      "name": "Rufus",
+      "description": "Formats USB drives and writes bootable ISO images to them.",
+      "icon": "💾",
+      "homepage": "https://rufus.ie/",
+      "category": "Utilities",
+      "targets": {
+        "windows": {
+          "url": "https://github.com/pbatard/rufus/releases/download/v4.15/rufus-4.15.exe",
+          "archiveType": "binary",
+          "launcher": "rufus-4.15.exe",
+          "sha256": "84c8a437f8af89257524478489e5c85f1edf25f761d299e2bcde46ac0afbe106"
+        }
+      }
     }
   ]
 }

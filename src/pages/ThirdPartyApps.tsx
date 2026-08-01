@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import PageHeader from "../components/PageHeader";
 import ActionButton from "../components/ActionButton";
 import { getErrorMessage } from "../lib/errors";
@@ -10,6 +11,10 @@ import { launchThirdPartyApp, scanThirdPartyApps, ThirdPartyApp } from "../lib/a
 // cheapest way to have manually-added apps "just show up" without the user
 // needing to know to hit refresh.
 const RESCAN_MS = 20_000;
+
+function FolderName() {
+  return <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-ink">Third Party Apps\</code>;
+}
 
 export default function ThirdPartyApps() {
   const [apps, setApps] = useState<ThirdPartyApp[]>([]);
@@ -52,13 +57,60 @@ export default function ThirdPartyApps() {
       <PageHeader
         icon="📦"
         title="Third Party Apps"
-        subtitle="Portable apps you copied onto the drive yourself, kept separate from the App Store catalog."
+        subtitle="Portable apps you add to the drive yourself, kept separate from the App Store catalog."
       />
 
-      <p className="mb-6 text-sm text-slate-600">
-        Apps you copy into <span className="font-semibold text-ink">Third Party Apps/</span> on the drive show up
-        here automatically — Lockbox didn't download these and can't verify them, it just found them.
-      </p>
+      <div className="neo-panel mb-6 bg-white p-5">
+        <h3 className="mb-3 text-base font-bold text-ink">How this works</h3>
+        <div className="space-y-3 text-sm text-slate-600">
+          <div className="flex gap-3">
+            <span className="shrink-0 text-lg">📁</span>
+            <p>
+              <span className="font-semibold text-ink">Where to put apps:</span> each app needs its own folder
+              inside <FolderName /> on the drive, containing the already-extracted program — its .exe and whatever
+              files it needs alongside it. A <code className="rounded bg-slate-100 px-1 text-xs">.zip</code> archive
+              or a <code className="rounded bg-slate-100 px-1 text-xs">Setup.exe</code> installer left un-extracted
+              in that folder won't be picked up — only subfolders are scanned, loose files are ignored.
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <span className="shrink-0 text-lg">🔄</span>
+            <p>
+              <span className="font-semibold text-ink">Updates are manual:</span> Lockbox only detects and launches
+              these apps — it never checks for or installs updates for them, since (unlike the App Store catalog or
+              Lockbox itself) it has no record of where they came from. When a new version is released, download it
+              yourself and replace the folder's contents.
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <span className="shrink-0 text-lg">🌐</span>
+            <p>
+              <span className="font-semibold text-ink">Where to find portable apps:</span>{" "}
+              <button
+                type="button"
+                onClick={() =>
+                  openUrl("https://portableapps.com/apps").catch((err) =>
+                    console.error("Failed to open PortableApps.com", err),
+                  )
+                }
+                className="font-semibold text-blue-600 underline decoration-blue-200 underline-offset-2 hover:text-blue-700"
+              >
+                PortableApps.com
+              </button>{" "}
+              has a large directory of ready-to-run portable apps. For anything else, check the app's own official
+              website for a "portable" or ".zip" download instead of its regular installer.
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <span className="shrink-0 text-lg">✅</span>
+            <p>
+              <span className="font-semibold text-ink">Nothing to set up by hand:</span> Lockbox creates{" "}
+              <FolderName /> automatically the moment it runs — whether from a USB drive or a synced cloud folder —
+              so there's no folder to create yourself first, portable or not.
+            </p>
+          </div>
+        </div>
+      </div>
 
       {error && (
         <p className="neo-card mb-6 bg-neo-red px-4 py-3 text-sm font-semibold text-white">{error}</p>
@@ -68,8 +120,8 @@ export default function ThirdPartyApps() {
         <p className="font-semibold text-slate-700">Scanning...</p>
       ) : apps.length === 0 ? (
         <div className="neo-card p-8 text-center font-semibold text-slate-600">
-          No manually-added apps found. Copy a portable app's folder into "Third Party Apps/" on the drive to see it
-          here.
+          No manually-added apps found yet. Copy a portable app's folder into "Third Party Apps\" on the drive to see
+          it here.
         </div>
       ) : (
         <div className="neo-panel divide-y divide-slate-200 overflow-hidden bg-white">

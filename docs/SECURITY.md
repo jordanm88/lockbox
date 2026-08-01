@@ -95,6 +95,37 @@ like SHA-256.
   deliberate trade-off of a passphrase-only, no-server design (no recovery
   path also means no third party ever custodies your data or key).
 
+## What's outside the vault entirely
+
+Everything above describes `Vault/`. It does not describe `Apps/`,
+`Third Party Apps/`, or `Tools/` — those are ordinary, unencrypted files on
+the drive. Installed and manually-added portable apps read and write their
+own settings, caches, and documents directly as real files at real paths;
+they have no way to go through Lockbox's encrypt/decrypt calls, so nothing
+in `crypto.rs` ever touches them. If someone gets the physical drive, the
+vault stays protected, but anything those apps wrote is fully readable.
+
+Extending Lockbox's own per-file encryption to cover those folders live
+would mean intercepting every read/write those apps make in real time — in
+practice, a virtual encrypted filesystem (something like a Dokan/WinFsp
+driver on Windows). That requires installing a driver on the host machine,
+which breaks the zero-install, fully-portable model this whole app is built
+around, so it isn't something Lockbox attempts.
+
+The practical fix is encrypting the whole drive underneath Lockbox instead —
+BitLocker To Go (built into Windows Pro/Enterprise/Education, no extra
+install) or VeraCrypt (free, works on any Windows edition including Home).
+Either one means the entire drive, Lockbox and all, is unreadable until
+unlocked at the OS level; the trade-off is a single password gating
+everything, rather than the vault having its own independent lock on top.
+
+The Settings page has a "Drive Encryption" check that reports whether the
+current drive is BitLocker-protected, so this isn't something you have to
+remember to verify by hand — but it can only detect BitLocker itself; it has
+no way to detect whether a VeraCrypt container is in use instead, since a
+mounted VeraCrypt volume looks like an ordinary drive from Windows' point of
+view.
+
 ## Where to look if you want to verify any of this yourself
 
 All of the above is implemented in a single, short file:

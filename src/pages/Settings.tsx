@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import PageHeader from "../components/PageHeader";
 import { AUTO_LOCK_OPTIONS, AutoLockOption } from "../types";
+import { checkDriveEncryption, DriveEncryptionStatus } from "../lib/securityBridge";
 
 interface SettingsProps {
   onLock: () => void;
@@ -33,9 +34,74 @@ export default function Settings({
   const [newPass, setNewPass] = useState("");
   const [confirmPass, setConfirmPass] = useState("");
 
+  const [driveStatus, setDriveStatus] = useState<DriveEncryptionStatus | null>(null);
+  const [checkingDrive, setCheckingDrive] = useState(false);
+
+  async function runDriveCheck() {
+    setCheckingDrive(true);
+    try {
+      setDriveStatus(await checkDriveEncryption());
+    } finally {
+      setCheckingDrive(false);
+    }
+  }
+
+  useEffect(() => {
+    runDriveCheck();
+  }, []);
+
   return (
     <div>
       <PageHeader icon="⚙️" title="Settings" subtitle="Vault passphrase and lock behavior." />
+
+      <div className="neo-panel mb-6 bg-paper p-6">
+        <h3 className="mb-1 text-xl font-semibold text-ink">Drive Encryption</h3>
+        <p className="mb-4 text-sm text-slate-600">
+          Lockbox only encrypts <span className="font-semibold">Vault/</span> — installed apps
+          and their data under <span className="font-semibold">Apps/</span>,{" "}
+          <span className="font-semibold">Third Party Apps/</span>, and{" "}
+          <span className="font-semibold">Tools/</span> are ordinary plaintext files, since those
+          programs need to read and write real files directly. Whole-drive encryption is what
+          protects everything else if this drive is lost or stolen.
+        </p>
+
+        {checkingDrive && !driveStatus ? (
+          <p className="text-sm font-medium text-slate-500">Checking…</p>
+        ) : driveStatus?.protected === true ? (
+          <div className="neo-card border-l-4 border-l-emerald-500 bg-emerald-50 p-4 text-sm text-emerald-800">
+            <p className="font-bold">✅ This drive is protected.</p>
+            <p className="mt-1">{driveStatus.detail}</p>
+          </div>
+        ) : driveStatus?.protected === false ? (
+          <div className="neo-card border-l-4 border-l-red-500 bg-red-50 p-4 text-sm text-red-800">
+            <p className="font-bold">⚠️ This drive isn't encrypted.</p>
+            <p className="mt-1">{driveStatus.detail}</p>
+            <p className="mt-3 font-semibold">To fix this:</p>
+            <ul className="ml-5 list-disc space-y-1">
+              <li>
+                In File Explorer, right-click this drive and choose{" "}
+                <span className="font-semibold">"Turn on BitLocker"</span> (Windows Pro,
+                Enterprise, or Education).
+              </li>
+              <li>On Windows Home, use VeraCrypt instead — it's free and works on any edition.</li>
+            </ul>
+          </div>
+        ) : (
+          <div className="neo-card bg-paper p-4 text-sm text-slate-600">
+            <p className="font-bold">ℹ️ Couldn't determine encryption status.</p>
+            <p className="mt-1">{driveStatus?.detail ?? "Unknown error."}</p>
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={runDriveCheck}
+          disabled={checkingDrive}
+          className="neo-btn mt-4 bg-white px-4 py-2 text-sm"
+        >
+          {checkingDrive ? "Checking…" : "Re-check"}
+        </button>
+      </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="neo-panel bg-paper p-6">

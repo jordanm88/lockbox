@@ -3,6 +3,7 @@ mod cloud_commands;
 mod cloud_config;
 mod commands;
 mod crypto;
+mod drive_encryption;
 mod eject;
 mod installer;
 mod paths;
@@ -72,6 +73,7 @@ pub fn run() {
             cloud_commands::restore_vault_from_cloud,
             cloud_commands::test_cloud_connection,
             eject::eject_usb_drive,
+            drive_encryption::check_drive_encryption,
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| fatal_startup_error(&format!("Tauri failed to start: {e}")));

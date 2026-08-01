@@ -49,8 +49,9 @@ fn cleanup_own_temp_files() -> Vec<String> {
 
 /// Extracts a Windows drive letter like `"E:"` from a root path such as
 /// `E:\` or `E:\SomeFolder`. Returns `None` for a UNC path or anything else
-/// without a drive-letter prefix.
-fn drive_letter_of(root: &Path) -> Option<String> {
+/// without a drive-letter prefix. Shared with `drive_encryption.rs`, which
+/// needs the same drive letter to query BitLocker status for.
+pub(crate) fn drive_letter_of(root: &Path) -> Option<String> {
     let text = root.components().next()?.as_os_str().to_str()?;
     if text.len() >= 2 && text.as_bytes()[1] == b':' {
         Some(text[..2].to_string())

@@ -54,6 +54,7 @@
       "icon": "🔧",
       "homepage": "https://jqlang.github.io/jq/",
       "category": "Utilities",
+      "active": false,
       "targets": {
         "windows": {
           "url": "https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-windows-amd64.exe",
@@ -100,6 +101,7 @@
       "icon": "📸",
       "homepage": "https://getsharex.com/",
       "category": "Utilities",
+      "active": false,
       "targets": {
         "windows": {
           "url": "https://github.com/ShareX/ShareX/releases/download/v21.0.0/ShareX-21.0.0-portable-x64.zip",
@@ -115,6 +117,7 @@
       "icon": "🔑",
       "homepage": "https://keepassxc.org/",
       "category": "Security",
+      "active": false,
       "targets": {
         "windows": {
           "url": "https://github.com/keepassxreboot/keepassxc/releases/download/2.7.12/KeePassXC-2.7.12-Win64.zip",
@@ -131,6 +134,7 @@
       "icon": "🗒️",
       "homepage": "https://www.sublimetext.com/",
       "category": "Development",
+      "active": false,
       "targets": {
         "windows": {
           "url": "https://download.sublimetext.com/sublime_text_build_4200_x64.zip",
@@ -147,6 +151,7 @@
       "icon": "🐬",
       "homepage": "https://www.heidisql.com/",
       "category": "Development",
+      "active": false,
       "targets": {
         "windows": {
           "url": "https://github.com/HeidiSQL/HeidiSQL/releases/download/v12.20/HeidiSQL_12.20_64_Portable.zip",
@@ -163,6 +168,7 @@
       "icon": "🔀",
       "homepage": "https://winmerge.org/",
       "category": "Development",
+      "active": false,
       "targets": {
         "windows": {
           "url": "https://github.com/WinMerge/winmerge/releases/download/v2.16.58/winmerge-2.16.58-x64-exe.zip",
@@ -179,6 +185,7 @@
       "icon": "⛏️",
       "homepage": "https://www.luanti.org/",
       "category": "Games",
+      "active": false,
       "targets": {
         "windows": {
           "url": "https://github.com/luanti-org/luanti/releases/download/5.16.1/luanti-5.16.1-win64.zip",
@@ -227,6 +234,7 @@
       "icon": "🎞️",
       "homepage": "https://handbrake.fr/",
       "category": "Multimedia",
+      "active": false,
       "targets": {
         "windows": {
           "url": "https://github.com/HandBrake/HandBrake/releases/download/1.11.2/HandBrake-1.11.2-x86_64-Win_GUI.zip",
@@ -243,6 +251,7 @@
       "icon": "✍️",
       "homepage": "https://gottcode.org/focuswriter/",
       "category": "Office",
+      "active": false,
       "targets": {
         "windows": {
           "url": "https://gottcode.org/focuswriter/download/?os=windowsportable",
@@ -310,6 +319,7 @@
       "icon": "📧",
       "homepage": "https://www.thunderbird.net/",
       "category": "Internet",
+      "active": false,
       "targets": {
         "windows": {
           "url": "https://download.mozilla.org/?product=thunderbird-latest&os=win64&lang=en-US",
@@ -325,6 +335,7 @@
       "icon": "🌐",
       "homepage": "https://www.chromium.org/getting-involved/download-chromium/",
       "category": "Internet",
+      "active": false,
       "targets": {
         "windows": {
           "url": "https://commondatastorage.googleapis.com/chromium-browser-snapshots/Win_x64/1672308/chrome-win.zip",

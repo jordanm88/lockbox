@@ -77,11 +77,20 @@ pub fn apply_portable_update(
 }
 
 fn read_repo_from_config(app_handle: &AppHandle) -> Result<String, String> {
-    let path = app_handle
+    let resource_raw = app_handle
         .path()
         .resolve("update.config.json", tauri::path::BaseDirectory::Resource)
-        .map_err(|e| format!("failed to resolve update config: {e}"))?;
-    let raw = fs::read_to_string(&path).map_err(|e| format!("failed to read update config: {e}"))?;
+        .ok()
+        .and_then(|path| fs::read_to_string(path).ok());
+
+    // Dev/runtime fallback: keep a compiled-in copy so update checks still
+    // work even if the packaged resource path is missing or misresolved —
+    // same reasoning as catalog.rs's embedded-catalog fallback.
+    let raw = match resource_raw {
+        Some(raw) => raw,
+        None => include_str!("../resources/update.config.json").to_string(),
+    };
+
     let cfg: Value = serde_json::from_str(&raw).map_err(|e| format!("invalid update config: {e}"))?;
     let repo = cfg
         .get("repo")

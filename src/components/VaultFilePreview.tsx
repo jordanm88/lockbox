@@ -31,6 +31,7 @@ function TextPreview({ objectUrl }: { objectUrl: string }) {
 
 export default function VaultFilePreview({ name, objectUrl, mimeType, onClose }: VaultFilePreviewProps) {
   const isImage = mimeType.startsWith("image/");
+  const isVideo = mimeType.startsWith("video/");
   const isPdf = mimeType === "application/pdf";
   const isText = mimeType.startsWith("text/") || mimeType === "application/json";
 
@@ -47,7 +48,7 @@ export default function VaultFilePreview({ name, objectUrl, mimeType, onClose }:
               <span className="rounded-full bg-white px-3 py-1 shadow-sm ring-1 ring-slate-200">Drive-style viewer</span>
             </div>
             <h3 className="mt-2 truncate text-lg font-semibold text-ink sm:text-xl">{name}</h3>
-            <p className="text-sm text-slate-600">{isImage ? "Image" : isPdf ? "PDF" : isText ? "Text" : "File"}</p>
+            <p className="text-sm text-slate-600">{isImage ? "Image" : isVideo ? "Video" : isPdf ? "PDF" : isText ? "Text" : "File"}</p>
           </div>
           <button type="button" onClick={onClose} className="neo-btn shrink-0 rounded-full bg-white px-4 py-2 text-slate-700">
             Close
@@ -58,9 +59,14 @@ export default function VaultFilePreview({ name, objectUrl, mimeType, onClose }:
           <div className="neo-panel h-full overflow-hidden bg-white p-2 sm:p-4">
             <div className="h-full min-h-0">
               {isImage && <img src={objectUrl} alt={name} className="mx-auto max-h-full w-auto max-w-full object-contain" />}
+              {isVideo && (
+                <video src={objectUrl} controls autoPlay className="mx-auto h-full max-h-full w-auto max-w-full">
+                  Your browser can't play this video format.
+                </video>
+              )}
               {isPdf && <iframe title={name} src={objectUrl} className="h-full min-h-[52vh] w-full sm:min-h-[68vh]" />}
               {isText && <TextPreview objectUrl={objectUrl} />}
-              {!isImage && !isPdf && !isText && (
+              {!isImage && !isVideo && !isPdf && !isText && (
                 <div className="flex h-full items-center justify-center px-6 text-center text-sm font-medium text-slate-600">
                   Preview not supported for this file type yet.
                 </div>

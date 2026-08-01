@@ -3,8 +3,9 @@ import PageHeader from "../components/PageHeader";
 import VaultFilePreview from "../components/VaultFilePreview";
 import VaultTreeView from "../components/VaultTreeView";
 import PicturesGrid from "../components/PicturesGrid";
+import VideosGrid from "../components/VideosGrid";
 import NewMenu from "../components/NewMenu";
-import { IMAGE_ACCEPT, isImageFile } from "../lib/fileKind";
+import { IMAGE_ACCEPT, isImageFile, isVideoFile, VIDEO_ACCEPT } from "../lib/fileKind";
 import {
   createFolder,
   listVaultFiles,
@@ -89,7 +90,7 @@ export default function Vault({ uploading, onStartUpload }: VaultProps) {
   const [pendingUpload, setPendingUpload] = useState<FileWithPath[]>([]);
   const [pendingFolders, setPendingFolders] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [sectionView, setSectionView] = useState<"files" | "pictures">("files");
+  const [sectionView, setSectionView] = useState<"files" | "pictures" | "videos">("files");
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -245,26 +246,38 @@ export default function Vault({ uploading, onStartUpload }: VaultProps) {
     setError(null);
     setNotice(null);
 
-    // The file picker's `accept` filter only steers the OS dialog — most
-    // dialogs still let someone switch to "All files" and pick anything
-    // anyway, so this is the actual enforcement of "photos only" while
-    // browsing Pictures, not just a suggestion.
-    if (sectionView === "pictures") {
-      const skippedCount = entries.length - entries.filter((entry) => isImageFile(entry.relativePath)).length;
-      entries = entries.filter((entry) => isImageFile(entry.relativePath));
-      if (entries.length === 0) {
-        setNotice("Only image files can be added from the Pictures view.");
-        return;
-      }
-      if (skippedCount > 0) {
-        setNotice(
-          `Skipped ${skippedCount} non-image file${skippedCount === 1 ? "" : "s"} — only photos can be added from the Pictures view.`,
-        );
-      }
-    }
+    const filtered = filterEntriesForSection(entries);
+    if (!filtered) return;
 
-    setPendingUpload(entries);
+    setPendingUpload(filtered);
     setPendingFolders([]);
+  }
+
+  // The file picker's `accept` filter only steers the OS dialog — most
+  // dialogs still let someone switch to "All files" and pick anything
+  // anyway, so this is the actual enforcement of "photos/videos only" while
+  // browsing the Pictures/Videos views, not just a suggestion. Returns null
+  // (after setting an explanatory notice) if nothing is left to upload.
+  function filterEntriesForSection(entries: FileWithPath[]): FileWithPath[] | null {
+    const matcher = sectionView === "pictures" ? isImageFile : sectionView === "videos" ? isVideoFile : null;
+    if (!matcher) return entries;
+
+    const kind = sectionView === "pictures" ? "image" : "video";
+    const label = sectionView === "pictures" ? "photos" : "videos";
+    const sectionName = sectionView === "pictures" ? "Pictures" : "Videos";
+
+    const kept = entries.filter((entry) => matcher(entry.relativePath));
+    const skippedCount = entries.length - kept.length;
+    if (kept.length === 0) {
+      setNotice(`Only ${kind} files can be added from the ${sectionName} view.`);
+      return null;
+    }
+    if (skippedCount > 0) {
+      setNotice(
+        `Skipped ${skippedCount} non-${kind} file${skippedCount === 1 ? "" : "s"} — only ${label} can be added from the ${sectionName} view.`,
+      );
+    }
+    return kept;
   }
 
   async function handleDrop(event: React.DragEvent<HTMLDivElement>) {
@@ -458,6 +471,10 @@ export default function Vault({ uploading, onStartUpload }: VaultProps) {
     () => files.filter((entry) => !entry.isDir && isImageFile(entry.name)).length,
     [files],
   );
+  const videoCount = useMemo(
+    () => files.filter((entry) => !entry.isDir && isVideoFile(entry.name)).length,
+    [files],
+  );
 
   return (
     <div className="relative">
@@ -487,6 +504,13 @@ export default function Vault({ uploading, onStartUpload }: VaultProps) {
             >
               🖼️ Pictures{pictureCount > 0 ? ` (${pictureCount})` : ""}
             </button>
+            <button
+              type="button"
+              onClick={() => setSectionView("videos")}
+              className={`px-3.5 py-1.5 text-sm font-medium transition ${sectionView === "videos" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-50"}`}
+            >
+              🎬 Videos{videoCount > 0 ? ` (${videoCount})` : ""}
+            </button>
           </div>
         </div>
 
@@ -505,7 +529,7 @@ export default function Vault({ uploading, onStartUpload }: VaultProps) {
           ref={inputRef}
           type="file"
           multiple
-          accept={sectionView === "pictures" ? IMAGE_ACCEPT : undefined}
+          accept={sectionView === "pictures" ? IMAGE_ACCEPT : sectionView === "videos" ? VIDEO_ACCEPT : undefined}
           className="hidden"
           onChange={async (event) => {
             // The DOM spec only guarantees `currentTarget` is set while the
@@ -554,6 +578,19 @@ export default function Vault({ uploading, onStartUpload }: VaultProps) {
         </div>
       ) : sectionView === "pictures" ? (
         <PicturesGrid
+          entries={files}
+          searchQuery={searchQuery}
+          onView={handleView}
+          onDelete={requestDelete}
+          onExport={handleExport}
+          selectedPaths={selectedPaths}
+          onToggleSelect={toggleSelect}
+          onSetSelection={setSelection}
+          onBulkExport={handleBulkExport}
+          onBulkDelete={requestBulkDelete}
+        />
+      ) : sectionView === "videos" ? (
+        <VideosGrid
           entries={files}
           searchQuery={searchQuery}
           onView={handleView}

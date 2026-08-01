@@ -3,22 +3,16 @@ import PageHeader from "../components/PageHeader";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { getErrorMessage } from "../lib/errors";
 import {
+  CloudAction,
   CloudRemoteConfig,
-  RcloneOutputLine,
   loadCloudConfig,
-  onRcloneOutput,
-  onRestoreFinished,
-  onSyncFinished,
-  onTestFinished,
-  restoreVaultFromCloud,
+  RestoreStatus,
   saveCloudConfig,
-  syncVaultNow,
-  testCloudConnection,
+  SyncStatus,
+  TestResult,
 } from "../lib/cloudSyncBridge";
 
 type Provider = CloudRemoteConfig["provider"];
-type SyncStatus = "idle" | "running" | "success" | "skipped" | "failed";
-type RestoreStatus = "idle" | "running" | "success" | "failed";
 
 interface CloudSyncProps {
   autoSyncEnabled: boolean;
@@ -27,6 +21,21 @@ interface CloudSyncProps {
   onChangeAutoSyncInterval: (next: number) => void;
   lastAutoSyncAt: string | null;
   lastAutoSyncError: string | null;
+  // Owned by App.tsx (not local state here) so a sync/test/restore started
+  // on this page — and the event listeners reporting its progress — keep
+  // running, and stay visible via the global toast, no matter which tab you
+  // switch to afterward. See the matching comment in App.tsx.
+  syncStatus: SyncStatus;
+  restoreStatus: RestoreStatus;
+  testing: boolean;
+  testResult: TestResult;
+  output: string[];
+  lastAction: CloudAction;
+  lastErrorDetail: string | null;
+  onSync: () => Promise<void>;
+  onTest: (config: CloudRemoteConfig) => Promise<void>;
+  onRestore: () => Promise<void>;
+  onRetryLastAction: (config: CloudRemoteConfig) => Promise<void>;
 }
 
 const AUTO_SYNC_INTERVALS = [
@@ -108,20 +117,24 @@ export default function CloudSync({
   onChangeAutoSyncInterval,
   lastAutoSyncAt,
   lastAutoSyncError,
+  syncStatus,
+  restoreStatus,
+  testing,
+  testResult,
+  output,
+  lastAction,
+  lastErrorDetail,
+  onSync,
+  onTest,
+  onRestore,
+  onRetryLastAction,
 }: CloudSyncProps) {
   const [config, setConfig] = useState<CloudRemoteConfig>(defaultConfigFor("s3"));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [testResult, setTestResult] = useState<"idle" | "ok" | "failed">("idle");
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
-  const [restoreStatus, setRestoreStatus] = useState<RestoreStatus>("idle");
+  const [configError, setConfigError] = useState<string | null>(null);
   const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false);
-  const [output, setOutput] = useState<string[]>([]);
-  const [lastAction, setLastAction] = useState<"sync" | "test" | "restore" | null>(null);
-  const [lastErrorDetail, setLastErrorDetail] = useState<string | null>(null);
   const outputRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -129,29 +142,8 @@ export default function CloudSync({
       .then((existing) => {
         if (existing) setConfig(existing);
       })
-      .catch((err) => setError(getErrorMessage(err, "Failed to load cloud config.")))
+      .catch((err) => setConfigError(getErrorMessage(err, "Failed to load cloud config.")))
       .finally(() => setLoading(false));
-
-    const outputUnlisten = onRcloneOutput((line: RcloneOutputLine) => {
-      setOutput((current) => [...current, line.line]);
-    });
-    const finishedUnlisten = onSyncFinished((result) => {
-      setSyncStatus(result.skipped ? "skipped" : result.success ? "success" : "failed");
-    });
-    const testFinishedUnlisten = onTestFinished((result) => {
-      setTesting(false);
-      setTestResult(result.success ? "ok" : "failed");
-    });
-    const restoreFinishedUnlisten = onRestoreFinished((result) => {
-      setRestoreStatus(result.success ? "success" : "failed");
-    });
-
-    return () => {
-      outputUnlisten.then((unlisten) => unlisten());
-      finishedUnlisten.then((unlisten) => unlisten());
-      testFinishedUnlisten.then((unlisten) => unlisten());
-      restoreFinishedUnlisten.then((unlisten) => unlisten());
-    };
   }, []);
 
   useEffect(() => {
@@ -171,51 +163,14 @@ export default function CloudSync({
 
   async function handleSave() {
     setSaving(true);
-    setError(null);
+    setConfigError(null);
     try {
       await saveCloudConfig(config);
       setSaved(true);
     } catch (err) {
-      setError(getErrorMessage(err, "Failed to save cloud config."));
+      setConfigError(getErrorMessage(err, "Failed to save cloud config."));
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function handleSync() {
-    setLastAction("sync");
-    setSyncStatus("running");
-    setOutput([]);
-    setError(null);
-    setLastErrorDetail(null);
-    try {
-      await syncVaultNow();
-      setSyncStatus("success");
-    } catch (err) {
-      setSyncStatus("failed");
-      const message = getErrorMessage(err, "Sync failed.");
-      setError(message);
-      setLastErrorDetail(message);
-    }
-  }
-
-  async function handleTestConnection() {
-    setLastAction("test");
-    setTesting(true);
-    setTestResult("idle");
-    setOutput([]);
-    setError(null);
-    setLastErrorDetail(null);
-    try {
-      await testCloudConnection(config);
-      setTestResult("ok");
-    } catch (err) {
-      setTestResult("failed");
-      const message = getErrorMessage(err, "Connection test failed.");
-      setError(message);
-      setLastErrorDetail(message);
-    } finally {
-      setTesting(false);
     }
   }
 
@@ -225,36 +180,10 @@ export default function CloudSync({
 
   async function handleRestore() {
     setRestoreConfirmOpen(false);
-    setLastAction("restore");
-    setRestoreStatus("running");
-    setOutput([]);
-    setError(null);
-    setLastErrorDetail(null);
-    try {
-      await restoreVaultFromCloud();
-      setRestoreStatus("success");
-    } catch (err) {
-      setRestoreStatus("failed");
-      const message = getErrorMessage(err, "Restore failed.");
-      setError(message);
-      setLastErrorDetail(message);
-    }
+    await onRestore();
   }
 
-  async function retryLastAction() {
-    if (lastAction === "sync") {
-      await handleSync();
-      return;
-    }
-    if (lastAction === "test") {
-      await handleTestConnection();
-      return;
-    }
-    if (lastAction === "restore") {
-      await handleRestore();
-    }
-  }
-
+  const error = configError ?? lastErrorDetail;
   const isRunning = syncStatus === "running";
   const isRestoring = restoreStatus === "running";
   const busy = isRunning || isRestoring || testing || saving || loading;
@@ -351,7 +280,7 @@ export default function CloudSync({
               </button>
               <button
                 type="button"
-                onClick={handleTestConnection}
+                onClick={() => onTest(config)}
                 disabled={busy}
                 className="neo-btn bg-white py-3 text-slate-700"
               >
@@ -369,7 +298,7 @@ export default function CloudSync({
                 <div className="neo-card bg-red-50 p-3">
                   <p className="text-sm font-semibold text-red-700">Last error: {lastErrorDetail}</p>
                   {lastAction && (
-                    <button type="button" onClick={retryLastAction} disabled={busy} className="neo-btn mt-2 bg-neo-red px-3 py-2 text-white">
+                    <button type="button" onClick={() => onRetryLastAction(config)} disabled={busy} className="neo-btn mt-2 bg-neo-red px-3 py-2 text-white">
                       Retry {lastAction === "sync" ? "sync" : lastAction === "restore" ? "restore" : "connection test"}
                     </button>
                   )}
@@ -393,7 +322,7 @@ export default function CloudSync({
 
           <button
             type="button"
-            onClick={handleSync}
+            onClick={onSync}
             disabled={busy}
             className="neo-btn mb-3 bg-neo-blue py-3 text-white"
           >

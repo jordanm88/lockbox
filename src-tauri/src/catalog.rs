@@ -27,7 +27,18 @@ pub struct CatalogApp {
     pub homepage: Option<String>,
     #[serde(default)]
     pub category: Option<String>,
+    /// Lets a catalog entry be pulled from installability without deleting
+    /// it outright — e.g. a source that's gone dead, or an install method
+    /// that turned out to be unreliable. Defaults to true so every existing
+    /// entry (and any hand-written one that omits the field) stays
+    /// installable exactly as before.
+    #[serde(default = "default_active")]
+    pub active: bool,
     pub targets: TargetsByOs,
+}
+
+fn default_active() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

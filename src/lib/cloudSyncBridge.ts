@@ -27,6 +27,11 @@ export type CloudRemoteConfig =
       remotePath: string;
     };
 
+export type SyncStatus = "idle" | "running" | "success" | "skipped" | "failed";
+export type RestoreStatus = "idle" | "running" | "success" | "failed";
+export type TestResult = "idle" | "ok" | "failed";
+export type CloudAction = "sync" | "test" | "restore" | null;
+
 export interface RcloneOutputLine {
   stream: "stdout" | "stderr";
   line: string;

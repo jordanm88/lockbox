@@ -9,6 +9,8 @@ export interface CatalogEntry {
   homepage: string | null;
   category: string | null;
   available: boolean;
+  /** False for a catalog entry the maintainer has deliberately pulled from installability (e.g. a dead source) without removing it entirely. */
+  active: boolean;
   installed: boolean;
   launcherPath: string | null;
   sizeBytes: number | null;

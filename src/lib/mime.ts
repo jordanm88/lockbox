@@ -11,6 +11,12 @@ const MIME_TYPES: Record<string, string> = {
   md: "text/markdown",
   csv: "text/csv",
   json: "application/json",
+  mp4: "video/mp4",
+  m4v: "video/mp4",
+  webm: "video/webm",
+  mov: "video/quicktime",
+  mkv: "video/x-matroska",
+  avi: "video/x-msvideo",
 };
 
 export function mimeTypeFor(name: string): string {

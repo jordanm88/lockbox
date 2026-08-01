@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { VaultFileEntry } from "../lib/vaultBridge";
-import { isImageFile } from "../lib/fileKind";
+import { isImageFile, isVideoFile } from "../lib/fileKind";
 
 interface Props {
   entries: VaultFileEntry[];
@@ -62,7 +62,7 @@ function fileVisual(name: string, isDir: boolean): FileVisual {
   if (["mp3", "wav", "flac", "ogg", "m4a"].includes(ext)) {
     return { icon: "🎵", bg: "bg-purple-50", text: "text-purple-600" };
   }
-  if (["mp4", "mov", "avi", "mkv", "webm"].includes(ext)) {
+  if (isVideoFile(name)) {
     return { icon: "🎬", bg: "bg-pink-50", text: "text-pink-600" };
   }
   if (["js", "ts", "tsx", "jsx", "py", "rs", "json", "html", "css", "sh", "yml", "yaml"].includes(ext)) {

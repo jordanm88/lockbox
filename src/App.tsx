@@ -8,9 +8,25 @@ import CloudSync from "./pages/CloudSync";
 import Settings from "./pages/Settings";
 import ConfirmDialog from "./components/ConfirmDialog";
 import UploadToast from "./components/UploadToast";
+import CloudSyncToast from "./components/CloudSyncToast";
 import WhatsNewDialog from "./components/WhatsNewDialog";
 import { lockVault, unlockVault } from "./lib/vaultBridge";
-import { loadCloudConfig, syncVaultNow } from "./lib/cloudSyncBridge";
+import {
+  CloudAction,
+  CloudRemoteConfig,
+  loadCloudConfig,
+  onRcloneOutput,
+  onRestoreFinished,
+  onSyncFinished,
+  onTestFinished,
+  RcloneOutputLine,
+  restoreVaultFromCloud,
+  RestoreStatus,
+  syncVaultNow,
+  SyncStatus,
+  testCloudConnection,
+  TestResult,
+} from "./lib/cloudSyncBridge";
 import {
   applyPortableUpdate,
   checkPortableUpdate,
@@ -69,6 +85,21 @@ export default function App() {
   );
   const [lastAutoSyncAt, setLastAutoSyncAt] = useState<string | null>(null);
   const [lastAutoSyncError, setLastAutoSyncError] = useState<string | null>(null);
+
+  // Lives here (not inside CloudSync) for the same reason uploads do —
+  // starting a sync/test/restore from the Cloud Sync page shouldn't lose its
+  // progress the moment you switch tabs. The event listeners below have to
+  // live here too: CloudSync unmounting would otherwise unregister them,
+  // silently dropping any output/finished event that arrives while you're
+  // looking at a different page instead of just hiding it.
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<SyncStatus>("idle");
+  const [cloudRestoreStatus, setCloudRestoreStatus] = useState<RestoreStatus>("idle");
+  const [cloudTesting, setCloudTesting] = useState(false);
+  const [cloudTestResult, setCloudTestResult] = useState<TestResult>("idle");
+  const [cloudOutput, setCloudOutput] = useState<string[]>([]);
+  const [cloudLastAction, setCloudLastAction] = useState<CloudAction>(null);
+  const [cloudLastErrorDetail, setCloudLastErrorDetail] = useState<string | null>(null);
+  const [cloudToastDismissed, setCloudToastDismissed] = useState(false);
 
   // Lives here (not inside Vault) so an upload started on the Vault page
   // keeps running — and stays visible via the toast rendered below — no
@@ -180,6 +211,17 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [uploadProgress]);
 
+  // Same auto-dismiss idea for the Cloud Sync toast, keyed off whichever of
+  // sync/restore actually reached a terminal (non-running, non-idle) state.
+  useEffect(() => {
+    const syncDone = cloudLastAction === "sync" && cloudSyncStatus !== "running" && cloudSyncStatus !== "idle";
+    const restoreDone = cloudLastAction === "restore" && cloudRestoreStatus !== "running" && cloudRestoreStatus !== "idle";
+    if (!syncDone && !restoreDone) return;
+    const isError = (syncDone && cloudSyncStatus === "failed") || (restoreDone && cloudRestoreStatus === "failed");
+    const timer = setTimeout(() => setCloudToastDismissed(true), isError ? 6000 : 3000);
+    return () => clearTimeout(timer);
+  }, [cloudLastAction, cloudSyncStatus, cloudRestoreStatus]);
+
   async function handleUnlock(passphrase: string): Promise<boolean> {
     const ok = await unlockVault(passphrase);
     if (ok) setUnlocked(true);
@@ -230,6 +272,87 @@ export default function App() {
       clearInterval(timer);
     };
   }, [unlocked, autoSyncEnabled, autoSyncIntervalMinutes]);
+
+  // Registered once, for the app's whole lifetime — not gated on `unlocked`
+  // or tied to any cleanup beyond unmount, since these are just passive
+  // setters with stable references. Re-registering them on every lock/unlock
+  // cycle would risk a gap where an in-flight rclone process's output has
+  // nowhere to land.
+  useEffect(() => {
+    const outputUnlisten = onRcloneOutput((line: RcloneOutputLine) => {
+      setCloudOutput((current) => [...current, line.line]);
+    });
+    const syncFinishedUnlisten = onSyncFinished((result) => {
+      setCloudSyncStatus(result.skipped ? "skipped" : result.success ? "success" : "failed");
+    });
+    const testFinishedUnlisten = onTestFinished((result) => {
+      setCloudTesting(false);
+      setCloudTestResult(result.success ? "ok" : "failed");
+    });
+    const restoreFinishedUnlisten = onRestoreFinished((result) => {
+      setCloudRestoreStatus(result.success ? "success" : "failed");
+    });
+
+    return () => {
+      outputUnlisten.then((unlisten) => unlisten());
+      syncFinishedUnlisten.then((unlisten) => unlisten());
+      testFinishedUnlisten.then((unlisten) => unlisten());
+      restoreFinishedUnlisten.then((unlisten) => unlisten());
+    };
+  }, []);
+
+  async function triggerCloudSync() {
+    setCloudLastAction("sync");
+    setCloudSyncStatus("running");
+    setCloudOutput([]);
+    setCloudLastErrorDetail(null);
+    setCloudToastDismissed(false);
+    try {
+      await syncVaultNow();
+      setCloudSyncStatus("success");
+    } catch (err) {
+      setCloudSyncStatus("failed");
+      setCloudLastErrorDetail(getErrorMessage(err, "Sync failed."));
+    }
+  }
+
+  async function triggerCloudTest(config: CloudRemoteConfig) {
+    setCloudLastAction("test");
+    setCloudTesting(true);
+    setCloudTestResult("idle");
+    setCloudOutput([]);
+    setCloudLastErrorDetail(null);
+    try {
+      await testCloudConnection(config);
+      setCloudTestResult("ok");
+    } catch (err) {
+      setCloudTestResult("failed");
+      setCloudLastErrorDetail(getErrorMessage(err, "Connection test failed."));
+    } finally {
+      setCloudTesting(false);
+    }
+  }
+
+  async function triggerCloudRestore() {
+    setCloudLastAction("restore");
+    setCloudRestoreStatus("running");
+    setCloudOutput([]);
+    setCloudLastErrorDetail(null);
+    setCloudToastDismissed(false);
+    try {
+      await restoreVaultFromCloud();
+      setCloudRestoreStatus("success");
+    } catch (err) {
+      setCloudRestoreStatus("failed");
+      setCloudLastErrorDetail(getErrorMessage(err, "Restore failed."));
+    }
+  }
+
+  async function retryCloudLastAction(config: CloudRemoteConfig) {
+    if (cloudLastAction === "sync") return triggerCloudSync();
+    if (cloudLastAction === "test") return triggerCloudTest(config);
+    if (cloudLastAction === "restore") return triggerCloudRestore();
+  }
 
   // Locks the vault after N minutes with no mouse/keyboard/scroll activity
   // anywhere on the page. Lives here (not in Settings) for the same reason
@@ -406,6 +529,17 @@ export default function App() {
               onChangeAutoSyncInterval={setAutoSyncIntervalMinutes}
               lastAutoSyncAt={lastAutoSyncAt}
               lastAutoSyncError={lastAutoSyncError}
+              syncStatus={cloudSyncStatus}
+              restoreStatus={cloudRestoreStatus}
+              testing={cloudTesting}
+              testResult={cloudTestResult}
+              output={cloudOutput}
+              lastAction={cloudLastAction}
+              lastErrorDetail={cloudLastErrorDetail}
+              onSync={triggerCloudSync}
+              onTest={triggerCloudTest}
+              onRestore={triggerCloudRestore}
+              onRetryLastAction={retryCloudLastAction}
             />
           )}
           {activeTab === "settings" && (
@@ -441,6 +575,17 @@ export default function App() {
       />
 
       <UploadToast progress={uploadProgress} onDismiss={() => setUploadProgress(null)} />
+
+      {!cloudToastDismissed && (
+        <CloudSyncToast
+          lastAction={cloudLastAction}
+          syncStatus={cloudSyncStatus}
+          restoreStatus={cloudRestoreStatus}
+          lastErrorDetail={cloudLastErrorDetail}
+          latestOutputLine={cloudOutput.length > 0 ? cloudOutput[cloudOutput.length - 1] : null}
+          onDismiss={() => setCloudToastDismissed(true)}
+        />
+      )}
 
       <WhatsNewDialog release={whatsNew} onDismiss={dismissWhatsNew} />
     </div>

@@ -295,6 +295,10 @@ export default function AppStore() {
                     <ActionButton type="button" disabled className="w-full sm:w-auto">
                       Unavailable on this OS
                     </ActionButton>
+                  ) : !app.active && !app.installed ? (
+                    <ActionButton type="button" disabled className="w-full sm:w-auto">
+                      Currently unavailable
+                    </ActionButton>
                   ) : app.installed ? (
                     <>
                       <ActionButton

@@ -80,6 +80,18 @@ pub fn install_app(app_handle: &AppHandle, root: &Path, app_id: &str) -> Result<
         .into_iter()
         .find(|a| a.id == app_id)
         .ok_or_else(|| format!("unknown app '{app_id}'"))?;
+
+    // Enforced here, not just by disabling the button in the UI — the App
+    // Store's "Install" button already won't call this for an inactive app,
+    // but the command itself has to refuse it too, the same way a disabled
+    // HTML button doesn't stop a direct API call from doing the thing anyway.
+    if !app.active {
+        return Err(format!(
+            "'{}' is currently disabled in the catalog and can't be installed.",
+            app.name
+        ));
+    }
+
     let target = app
         .targets
         .for_current_os()

@@ -32,12 +32,17 @@
           "type": "string",
           "description": "Grouping shown as a filter chip in the App Store UI, e.g. 'Office', 'Development', 'Utilities'."
         },
+        "active": {
+          "type": "boolean",
+          "description": "Defaults to true. Set false to pull an entry from installability without deleting it."
+        },
         "targets": {
           "type": "object",
           "minProperties": 1,
           "additionalProperties": false,
           "properties": {
-            "windows": { "$ref": "#/$defs/target" }
+            "windows": { "$ref": "#/$defs/target" },
+            "linux": { "$ref": "#/$defs/target" }
           }
         }
       }

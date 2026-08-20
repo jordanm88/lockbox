@@ -84,6 +84,23 @@ pub fn vault_exists(state: State<AppState>) -> Result<bool, String> {
     Ok(meta_path.exists())
 }
 
+/// Surfaces where the vault actually lives. Mainly relevant on Linux, where
+/// (unlike the Windows portable exe) that folder isn't necessarily next to
+/// the running binary — see `usb_root::find_usb_root` — so Settings shows
+/// this to make the remembered choice visible.
+#[tauri::command]
+pub fn get_vault_root(state: State<AppState>) -> Result<String, String> {
+    Ok(state.root.to_string_lossy().to_string())
+}
+
+/// Lets the frontend pick platform-specific copy (BitLocker/VeraCrypt vs.
+/// LUKS wording, eject phrasing, …) without needing a whole OS-detection
+/// plugin dependency for what's otherwise just a couple of static strings.
+#[tauri::command]
+pub fn get_platform() -> String {
+    std::env::consts::OS.to_string()
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StorageInfo {

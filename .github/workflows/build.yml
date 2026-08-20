@@ -20,12 +20,32 @@ jobs:
   build:
     strategy:
       fail-fast: false
+      # ubuntu-22.04 is pinned rather than ubuntu-latest so the .deb's glibc
+      # requirement doesn't silently creep up whenever GitHub bumps the
+      # default runner's Ubuntu version — a .deb built against a newer glibc
+      # than a user's system ships refuses to install there.
       matrix:
-        platform: [windows-latest]
+        platform: [windows-latest, ubuntu-22.04]
     runs-on: ${{ matrix.platform }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # Tauri's Linux build links against webkit2gtk/GTK3 at compile time
+      # (via wry/rfd) — none of this is needed on Windows, where Tauri uses
+      # the OS's own WebView2 instead.
+      - name: Install Linux build prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            build-essential \
+            libssl-dev
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -60,6 +80,7 @@ jobs:
           path: |
             src-tauri/target/release/bundle/
             src-tauri/target/release/Lockbox.exe
+            src-tauri/target/release/Lockbox
           if-no-files-found: warn
           retention-days: 14
 
@@ -78,10 +99,11 @@ jobs:
           path: artifacts
 
       # Attaches the portable exe plus the MSI and NSIS installer from
-      # `bundle/`, so a release covers all three distribution forms. The
-      # in-app self-updater (updates.rs) only ever picks the portable exe —
-      # it explicitly skips anything with "setup"/"installer" in the name —
-      # so adding the installers here doesn't affect it (see
+      # `bundle/`, and the Linux `.deb`, so a release covers every
+      # distribution form built above. The in-app self-updater (updates.rs)
+      # only ever picks the portable exe on Windows or the `.deb` on Linux —
+      # it explicitly skips anything with "setup"/"installer" in the name on
+      # Windows — so adding the installers here doesn't affect it (see
       # docs/DISTRIBUTION.md). The binary is always `Lockbox.exe` (matching
       # Cargo.toml's `[[bin]] name`) — an earlier version of this workflow
       # also matched a lowercase `lockbox.exe` pattern on the theory that
@@ -107,6 +129,7 @@ jobs:
             artifacts/**/Lockbox.exe
             artifacts/**/bundle/msi/*.msi
             artifacts/**/bundle/nsis/*.exe
+            artifacts/**/bundle/deb/*.deb
 
   # The normal release path: every push to main checks whether
   # package.json's version has moved past the last tag, and if so, creates
@@ -167,6 +190,7 @@ jobs:
             artifacts/**/Lockbox.exe
             artifacts/**/bundle/msi/*.msi
             artifacts/**/bundle/nsis/*.exe
+            artifacts/**/bundle/deb/*.deb
 
   publish_optional:
     needs: build
@@ -189,3 +213,4 @@ jobs:
             artifacts/**/Lockbox.exe
             artifacts/**/bundle/msi/*.msi
             artifacts/**/bundle/nsis/*.exe
+            artifacts/**/bundle/deb/*.deb

@@ -45,11 +45,24 @@ fn default_active() -> bool {
 pub struct TargetsByOs {
     #[serde(default)]
     pub windows: Option<TargetSpec>,
+    #[serde(default)]
+    pub linux: Option<TargetSpec>,
 }
 
 impl TargetsByOs {
     pub fn for_current_os(&self) -> Option<&TargetSpec> {
-        self.windows.as_ref()
+        #[cfg(windows)]
+        {
+            self.windows.as_ref()
+        }
+        #[cfg(target_os = "linux")]
+        {
+            self.linux.as_ref()
+        }
+        #[cfg(not(any(windows, target_os = "linux")))]
+        {
+            None
+        }
     }
 }
 

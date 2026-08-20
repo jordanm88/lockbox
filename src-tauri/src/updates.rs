@@ -1,14 +1,12 @@
+#[cfg(windows)]
+use crate::process_ext;
 use serde::Serialize;
 use serde_json::Value;
 use std::fs;
+#[cfg(windows)]
 use std::io::Write;
-use std::os::windows::process::CommandExt;
 use tauri::AppHandle;
 use tauri::Manager;
-
-/// See the identical constant in rclone.rs — suppresses the console window
-/// flash a `cmd.exe` spawn would otherwise cause.
-const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -68,7 +66,7 @@ pub fn check_portable_update(app_handle: AppHandle) -> Result<PortableUpdateInfo
         .map(|s| s.to_string());
 
     let (asset_name, asset_download_url) = if has_update {
-        find_windows_portable_asset(&latest_release)
+        find_platform_asset(&latest_release)
     } else {
         (None, None)
     };
@@ -109,10 +107,10 @@ pub fn apply_portable_update(
     app_handle: AppHandle,
     download_url: String,
 ) -> Result<ApplyUpdateResult, String> {
-    apply_windows_portable_update(&app_handle, &download_url)?;
+    let message = apply_platform_update(&app_handle, &download_url)?;
     Ok(ApplyUpdateResult {
         started: true,
-        message: "Update downloaded. Lockbox will close now and restart into the new version.".to_string(),
+        message,
     })
 }
 
@@ -184,7 +182,49 @@ fn parse_version_parts(version: &str) -> Vec<u64> {
         .collect::<Vec<_>>()
 }
 
-fn find_windows_portable_asset(release: &Value) -> (Option<String>, Option<String>) {
+/// Finds the release asset this build's self-updater knows how to apply:
+/// the raw portable `.exe` on Windows, the `.deb` on Linux. Shared scoring
+/// shape between both platforms — favor an asset name that names the OS,
+/// then a bare "lockbox" name, then any name that merely mentions lockbox.
+#[cfg(windows)]
+fn find_platform_asset(release: &Value) -> (Option<String>, Option<String>) {
+    find_best_asset(
+        release,
+        ".exe",
+        &["setup", "installer"],
+        ("lockbox-windows", 100),
+        ("lockbox.exe", 90),
+    )
+}
+
+/// No CI-produced `.deb` name reliably contains "lockbox-linux" the way the
+/// Windows build's does — Tauri's bundler names it from the package
+/// version/arch instead (e.g. `lockbox_0.2.16_amd64.deb`) — so the
+/// meaningful disambiguator here is architecture, in case a future release
+/// ever publishes more than one. The exact-match tier is unused (no bare
+/// canonical Linux filename to prefer), so it's given a pattern that can
+/// never match.
+#[cfg(target_os = "linux")]
+fn find_platform_asset(release: &Value) -> (Option<String>, Option<String>) {
+    find_best_asset(release, ".deb", &[], ("amd64", 100), ("", 0))
+}
+
+/// Shared scoring logic behind `find_platform_asset`: every asset must end
+/// in `extension` and must not contain any of `excluded_substrings` (used on
+/// Windows to skip the NSIS installer `.exe` alongside the portable one —
+/// this updater only knows how to swap a running exe/package in place, not
+/// run an interactive installer). Among what's left, an asset whose name
+/// contains `contains_pattern.0` scores highest, one that's an exact match
+/// for `exact_name.0` scores second, and anything else that merely mentions
+/// "lockbox" is the generic fallback.
+#[cfg(any(windows, target_os = "linux"))]
+fn find_best_asset(
+    release: &Value,
+    extension: &str,
+    excluded_substrings: &[&str],
+    contains_pattern: (&str, i32),
+    exact_name: (&str, i32),
+) -> (Option<String>, Option<String>) {
     let assets = release
         .get("assets")
         .and_then(|v| v.as_array())
@@ -210,23 +250,18 @@ fn find_windows_portable_asset(release: &Value) -> (Option<String>, Option<Strin
         }
 
         let lower = name.to_ascii_lowercase();
-        if !lower.ends_with(".exe") {
+        if !lower.ends_with(extension) {
             continue;
         }
 
-        // The release also carries an NSIS installer .exe alongside the raw
-        // portable one (see docs/DISTRIBUTION.md) — this updater only knows
-        // how to swap a running exe in place, not run an installer, so an
-        // installer-named asset must never be picked here even if it would
-        // otherwise score high enough to win.
-        if lower.contains("setup") || lower.contains("installer") {
+        if excluded_substrings.iter().any(|s| lower.contains(s)) {
             continue;
         }
 
-        let score = if lower.contains("lockbox-windows") {
-            100
-        } else if lower == "lockbox.exe" {
-            90
+        let score = if lower.contains(contains_pattern.0) {
+            contains_pattern.1
+        } else if lower == exact_name.0 {
+            exact_name.1
         } else if lower.contains("lockbox") {
             70
         } else {
@@ -250,11 +285,14 @@ fn find_windows_portable_asset(release: &Value) -> (Option<String>, Option<Strin
     }
 }
 
-fn apply_windows_portable_update(app_handle: &AppHandle, download_url: &str) -> Result<(), String> {
-    if !(download_url.starts_with("https://github.com/")
-        || download_url.starts_with("https://objects.githubusercontent.com/")
-        || download_url.starts_with("https://github-releases.githubusercontent.com/"))
-    {
+const TRUSTED_DOWNLOAD_HOSTS: &[&str] = &[
+    "https://github.com/",
+    "https://objects.githubusercontent.com/",
+    "https://github-releases.githubusercontent.com/",
+];
+
+fn download_update_bytes(download_url: &str) -> Result<Vec<u8>, String> {
+    if !TRUSTED_DOWNLOAD_HOSTS.iter().any(|host| download_url.starts_with(host)) {
         return Err("refusing update from non-GitHub download URL".to_string());
     }
 
@@ -273,6 +311,20 @@ fn apply_windows_portable_update(app_handle: &AppHandle, download_url: &str) -> 
     response
         .copy_to(&mut bytes)
         .map_err(|e| format!("failed to read update payload: {e}"))?;
+    Ok(bytes)
+}
+
+/// Downloads the update and swaps it into place: on Windows this stages the
+/// new exe and hands off to a detached `.bat` helper that waits for this
+/// process to exit before moving it over the running one (Windows won't let
+/// a running exe's own file be replaced while it's open, unlike Linux). On
+/// Linux there's no such in-place swap available for a `.deb`-installed,
+/// dpkg-owned binary — instead the downloaded `.deb` is handed to the
+/// desktop's own package-install UI (`apply_linux_update`), which does its
+/// own privilege elevation; Lockbox never runs anything as root itself.
+#[cfg(windows)]
+fn apply_platform_update(app_handle: &AppHandle, download_url: &str) -> Result<String, String> {
+    let bytes = download_update_bytes(download_url)?;
 
     if bytes.len() < 2 || bytes[0] != b'M' || bytes[1] != b'Z' {
         return Err("downloaded update is not a Windows executable".to_string());
@@ -296,15 +348,42 @@ fn apply_windows_portable_update(app_handle: &AppHandle, download_url: &str) -> 
     let updater_script_str = updater_script_path.to_string_lossy().to_string();
     let temp_new_str = temp_new.to_string_lossy().to_string();
 
-    std::process::Command::new("cmd")
-        .arg("/C")
-        .arg(&updater_script_str)
-        .arg(&current_exe_str)
-        .arg(&temp_new_str)
-        .creation_flags(CREATE_NO_WINDOW)
-        .spawn()
+    let mut cmd = std::process::Command::new("cmd");
+    cmd.arg("/C").arg(&updater_script_str).arg(&current_exe_str).arg(&temp_new_str);
+    process_ext::hide_console(&mut cmd);
+    cmd.spawn()
         .map_err(|e| format!("failed to launch updater helper: {e}"))?;
 
     app_handle.exit(0);
-    Ok(())
+    Ok("Update downloaded. Lockbox will close now and restart into the new version.".to_string())
+}
+
+#[cfg(target_os = "linux")]
+fn apply_platform_update(app_handle: &AppHandle, download_url: &str) -> Result<String, String> {
+    let bytes = download_update_bytes(download_url)?;
+
+    // A `.deb` is a Unix `ar` archive; this is that format's magic header,
+    // the Linux equivalent of checking for the Windows PE `MZ` header above.
+    if bytes.len() < 8 || &bytes[..8] != b"!<arch>\n" {
+        return Err("downloaded update is not a .deb package".to_string());
+    }
+
+    let temp_deb = std::env::temp_dir().join("lockbox-update.deb");
+    fs::write(&temp_deb, &bytes).map_err(|e| format!("failed to stage update: {e}"))?;
+
+    // Hands the downloaded package to the desktop's default handler for
+    // `.deb` files (GNOME Software, KDE Discover, etc.), which does its own
+    // polkit/pkexec prompt to install it — Lockbox never elevates privileges
+    // itself. Unlike the Windows in-place swap, this doesn't happen
+    // automatically: the user finishes the install in that window, then
+    // relaunches Lockbox.
+    tauri_plugin_opener::open_path(&temp_deb, None::<&str>)
+        .map_err(|e| format!("failed to open the downloaded update: {e}"))?;
+
+    app_handle.exit(0);
+    Ok(
+        "Update downloaded. Finish installing it in the package installer window that just \
+         opened, then relaunch Lockbox."
+            .to_string(),
+    )
 }

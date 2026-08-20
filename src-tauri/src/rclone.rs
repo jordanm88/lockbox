@@ -1,7 +1,7 @@
 use crate::cloud_config::CloudRemoteConfig;
+use crate::process_ext;
 use crate::usb_root;
 use serde::Serialize;
-use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use tauri::{AppHandle, Emitter};
@@ -9,18 +9,27 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 
 const REMOTE_NAME: &str = "lockbox_remote";
 
-/// Passed to every rclone (and rclone-adjacent) subprocess spawn. Without
-/// it, Windows briefly flashes a console window for each one — rclone.exe
-/// is a console-subsystem binary, so every sync/restore/test/obscure call
-/// pops one open and closes it again, which reads as the app glitching even
-/// though nothing actually failed.
-const CREATE_NO_WINDOW: u32 = 0x08000000;
+/// The rclone binary's name on this platform: `rclone.exe` on Windows,
+/// plain `rclone` on Linux.
+#[cfg(windows)]
+const RCLONE_BIN_NAME: &str = "rclone.exe";
+#[cfg(not(windows))]
+const RCLONE_BIN_NAME: &str = "rclone";
 
-/// USB_ROOT/Tools/rclone.exe — the embedded binary. Nothing here assumes
+/// USB_ROOT/Tools/rclone(.exe) — the embedded binary. Nothing here assumes
 /// rclone is installed on the host.
 pub fn rclone_binary_path(root: &Path) -> PathBuf {
-    usb_root::tools_dir(root).join("rclone.exe")
+    usb_root::tools_dir(root).join(RCLONE_BIN_NAME)
 }
+
+/// A path rclone accepts as "no config file" for `--config`, forcing it to
+/// use only the remote we defined via env vars, never whatever config file
+/// (if any) happens to exist on the host. Windows has no `/dev/null`, but
+/// accepts the reserved device name `NUL` the same way.
+#[cfg(windows)]
+const NULL_DEVICE_PATH: &str = "NUL";
+#[cfg(not(windows))]
+const NULL_DEVICE_PATH: &str = "/dev/null";
 
 /// The directory actually worth backing up. `Vault/` itself contains
 /// nothing but the hidden `.lockbox/` folder — the encrypted index, meta,
@@ -103,7 +112,7 @@ pub async fn run_rclone_sync(
     let target = remote_target(REMOTE_NAME, &config);
     // Force rclone to use only the remote we defined via env vars, never
     // whatever config file (if any) happens to exist on the host.
-    let null_config_path = "NUL";
+    let null_config_path = NULL_DEVICE_PATH;
 
     // `rclone sync` mirrors source onto dest, deleting anything in dest that
     // isn't in source. If the local vault is empty, only allow this to
@@ -152,8 +161,8 @@ pub async fn run_rclone_sync(
         .envs(env_vars)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .creation_flags(CREATE_NO_WINDOW);
+        .stderr(Stdio::piped());
+    process_ext::tokio_hide_console(&mut command);
 
     let mut child = command
         .spawn()
@@ -220,7 +229,7 @@ pub async fn run_rclone_restore(
     };
 
     let target = remote_target(REMOTE_NAME, &config);
-    let null_config_path = "NUL";
+    let null_config_path = NULL_DEVICE_PATH;
 
     let mut command = tokio::process::Command::new(&rclone_path);
     command
@@ -234,8 +243,8 @@ pub async fn run_rclone_restore(
         .envs(env_vars)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .creation_flags(CREATE_NO_WINDOW);
+        .stderr(Stdio::piped());
+    process_ext::tokio_hide_console(&mut command);
 
     let mut child = command
         .spawn()
@@ -294,7 +303,7 @@ pub async fn run_rclone_test(
     };
 
     let target = remote_target(REMOTE_NAME, &config);
-    let null_config_path = "NUL";
+    let null_config_path = NULL_DEVICE_PATH;
 
     let mut command = tokio::process::Command::new(&rclone_path);
     command
@@ -307,8 +316,8 @@ pub async fn run_rclone_test(
         .envs(env_vars)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .creation_flags(CREATE_NO_WINDOW);
+        .stderr(Stdio::piped());
+    process_ext::tokio_hide_console(&mut command);
 
     let mut child = command
         .spawn()
@@ -384,7 +393,8 @@ async fn remote_has_content(
     target: &str,
     null_config_path: &str,
 ) -> Result<bool, String> {
-    let output = tokio::process::Command::new(rclone_path)
+    let mut command = tokio::process::Command::new(rclone_path);
+    command
         .arg("lsf")
         .arg(target)
         .arg("--max-depth")
@@ -394,8 +404,10 @@ async fn remote_has_content(
         .envs(env_vars.iter().cloned())
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .creation_flags(CREATE_NO_WINDOW)
+        .stderr(Stdio::piped());
+    process_ext::tokio_hide_console(&mut command);
+
+    let output = command
         .output()
         .await
         .map_err(|e| format!("failed to inspect remote target: {e}"))?;
@@ -525,12 +537,11 @@ fn build_remote_env(
 /// its "obscured" form — a reversible obfuscation, not real encryption, that
 /// keeps the value from being stored as a plain string in config values.
 fn obscure_password(rclone_path: &Path, plaintext: &str) -> Result<String, String> {
-    let output = std::process::Command::new(rclone_path)
-        .arg("obscure")
-        .arg(plaintext)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .creation_flags(CREATE_NO_WINDOW)
+    let mut command = std::process::Command::new(rclone_path);
+    command.arg("obscure").arg(plaintext).stdout(Stdio::piped()).stderr(Stdio::piped());
+    process_ext::hide_console(&mut command);
+
+    let output = command
         .output()
         .map_err(|e| format!("rclone obscure failed: {e}"))?;
 
@@ -547,18 +558,30 @@ fn obscure_password(rclone_path: &Path, plaintext: &str) -> Result<String, Strin
 fn resolve_rclone_binary(root: &Path) -> Result<PathBuf, String> {
     let bundled = rclone_binary_path(root);
     if bundled.is_file() {
+        // A binary someone dropped into Tools/ by hand (e.g. a manually
+        // assembled portable copy, mirroring the Windows USB layout) often
+        // doesn't carry the executable bit through whatever transferred it.
+        // Best-effort only: if this fails, the spawn below will surface a
+        // clear "permission denied" error anyway.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Ok(metadata) = std::fs::metadata(&bundled) {
+                let mut permissions = metadata.permissions();
+                permissions.set_mode(permissions.mode() | 0o111);
+                let _ = std::fs::set_permissions(&bundled, permissions);
+            }
+        }
         return Ok(bundled);
     }
 
     // Fallback to host PATH for development/desktop scenarios.
-    let cmd = "rclone.exe";
+    let cmd = RCLONE_BIN_NAME;
 
-    let probe = std::process::Command::new(cmd)
-        .arg("version")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .creation_flags(CREATE_NO_WINDOW)
-        .status();
+    let mut probe_command = std::process::Command::new(cmd);
+    probe_command.arg("version").stdout(Stdio::null()).stderr(Stdio::null());
+    process_ext::hide_console(&mut probe_command);
+    let probe = probe_command.status();
 
     if probe.is_ok() {
         return Ok(PathBuf::from(cmd));

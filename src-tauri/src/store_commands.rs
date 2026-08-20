@@ -132,7 +132,10 @@ pub fn launch_third_party_app(state: State<AppState>, app_path: String) -> Resul
 
 /// Windows error 32 (`ERROR_SHARING_VIOLATION`) — the file exists and is
 /// valid, but something else currently has it open in a way that conflicts
-/// with launching it.
+/// with launching it. Linux has no equivalent transient-lock race on plain
+/// `exec` (see `is_retryable_launch_error` below), so this constant, and the
+/// retry it drives, only ever fires on Windows.
+#[cfg(windows)]
 const ERROR_SHARING_VIOLATION: i32 = 32;
 
 /// A handful of retries with a short backoff, specifically for
@@ -147,6 +150,22 @@ const ERROR_SHARING_VIOLATION: i32 = 32;
 /// thousands of files hits almost every time on a fresh install).
 const LAUNCH_RETRY_ATTEMPTS: u32 = 6;
 const LAUNCH_RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(400);
+
+/// Whether a launch failure is the kind worth retrying. Windows: only the
+/// specific transient AV-scan lock race described above. Linux has no
+/// analogous "something briefly locked the file right after we wrote it"
+/// failure mode for a plain `exec` — a Linux launch failure (missing exec
+/// bit, ELF for the wrong architecture, etc.) is permanent, so retrying
+/// would just delay showing the real error for no benefit.
+#[cfg(windows)]
+fn is_retryable_launch_error(e: &std::io::Error) -> bool {
+    e.raw_os_error() == Some(ERROR_SHARING_VIOLATION)
+}
+
+#[cfg(not(windows))]
+fn is_retryable_launch_error(_e: &std::io::Error) -> bool {
+    false
+}
 
 fn launch_from(base_dir: &Path, app_path: &str) -> Result<(), String> {
     let resolved = paths::safe_join(base_dir, app_path)?;
@@ -163,7 +182,7 @@ fn launch_from(base_dir: &Path, app_path: &str) -> Result<(), String> {
             Ok(_) => return Ok(()),
             Err(e) => {
                 let is_last_attempt = attempt + 1 == LAUNCH_RETRY_ATTEMPTS;
-                if e.raw_os_error() != Some(ERROR_SHARING_VIOLATION) || is_last_attempt {
+                if !is_retryable_launch_error(&e) || is_last_attempt {
                     last_error = Some(e);
                     break;
                 }
@@ -204,8 +223,10 @@ pub struct ThirdPartyApp {
 /// Scans `Third Party Apps/` for portable apps the user copied in by hand
 /// (rather than installing through the App Store) so they still show up
 /// somewhere in the UI. Each immediate subfolder becomes one entry; the
-/// launcher is guessed as the largest non-helper .exe found anywhere inside
-/// it, since the main application binary is almost always the biggest file
+/// launcher is guessed as the largest non-helper executable found anywhere
+/// inside it (a `.exe` on Windows; any regular file with the executable bit
+/// set on Linux, since portable Linux binaries carry no fixed extension),
+/// since the main application binary is almost always the biggest file
 /// while uninstallers/updaters/crash-handlers are small. Re-run on every
 /// call rather than cached, so dropping in a new folder shows up on the
 /// App Store's next periodic refresh without restarting Lockbox. Runs
@@ -232,7 +253,7 @@ pub fn scan_third_party_apps(state: State<AppState>) -> Result<Vec<ThirdPartyApp
         let name = entry.file_name().to_string_lossy().to_string();
 
         let mut candidates = Vec::new();
-        find_exe_files(&path, &mut candidates)?;
+        find_launcher_candidates(&path, &mut candidates)?;
         candidates.retain(|candidate| {
             let lower = candidate
                 .file_name()
@@ -266,21 +287,36 @@ pub fn scan_third_party_apps(state: State<AppState>) -> Result<Vec<ThirdPartyApp
     Ok(apps)
 }
 
-fn find_exe_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
+fn find_launcher_candidates(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
     for entry in
         std::fs::read_dir(dir).map_err(|e| format!("failed to scan {}: {e}", dir.display()))?
     {
         let entry = entry.map_err(|e| format!("failed to read directory entry: {e}"))?;
         let path = entry.path();
         if path.is_dir() {
-            find_exe_files(&path, out)?;
-        } else if path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
-        {
+            find_launcher_candidates(&path, out)?;
+        } else if is_launcher_candidate(&path) {
             out.push(path);
         }
     }
     Ok(())
+}
+
+#[cfg(windows)]
+fn is_launcher_candidate(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
+}
+
+/// Linux portable binaries and AppImages carry no fixed extension, so
+/// candidacy is instead "a regular file with the executable bit set for
+/// someone" — the same thing a file manager or shell checks before letting
+/// you run it by clicking/typing its name.
+#[cfg(target_os = "linux")]
+fn is_launcher_candidate(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::metadata(path)
+        .map(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+        .unwrap_or(false)
 }

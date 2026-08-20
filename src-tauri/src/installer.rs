@@ -1,22 +1,17 @@
 use crate::catalog::{self, ArchiveType, TargetSpec};
+use crate::process_ext;
 use crate::{paths, usb_root};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+#[cfg(windows)]
 use std::env;
 use std::fs::File;
 use std::io::{Cursor, Read};
-use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
-
-/// See the identical constant in rclone.rs. Most silent-install-capable
-/// installers (NSIS/InnoSetup) are GUI-subsystem anyway and wouldn't flash a
-/// console regardless, but this is harmless for those and protects against
-/// any console-subsystem installer too.
-const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 /// Sidecar file written inside `Apps/<id>/` recording where the launcher
 /// actually ended up, when that differs from the catalog's declared path
@@ -146,6 +141,13 @@ fn install_app_inner(
         ArchiveType::Binary | ArchiveType::Exe => install_single_file(&bytes, install_dir, &target.launcher)?,
         ArchiveType::Installer => install_windows_installer(app_handle, app_id, &bytes, install_dir, &target.launcher)?,
     }
+
+    // Neither the zip extraction nor a raw downloaded binary reliably
+    // carries the Unix executable bit through, so a freshly-installed
+    // portable Linux app would otherwise fail to launch with "Permission
+    // denied" — set it explicitly on everything the archive just produced.
+    #[cfg(unix)]
+    make_all_executable(install_dir);
 
     // Single-file installs always land the launcher exactly where we said
     // to — only archive-based ones can unpack into a version-named wrapper
@@ -390,6 +392,49 @@ fn find_by_name(dir: &Path, name: &std::ffi::OsStr, out: &mut Vec<PathBuf>) -> R
     Ok(())
 }
 
+/// Recursively `chmod +x`'s every regular file under `dir`. No Linux catalog
+/// entry currently uses `ArchiveType::Installer` (there's no silent-install
+/// convention to speak of for the plain tar.gz/zip/binary archives Linux
+/// portable apps ship as here), so this is only ever reached for `Zip`,
+/// `TarGz`, `Binary`, and `Exe` targets.
+#[cfg(unix)]
+fn make_all_executable(dir: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(_) => return,
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            make_all_executable(&path);
+            continue;
+        }
+        if let Ok(metadata) = entry.metadata() {
+            if metadata.is_file() {
+                let mut permissions = metadata.permissions();
+                permissions.set_mode(permissions.mode() | 0o111);
+                let _ = std::fs::set_permissions(&path, permissions);
+            }
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn install_windows_installer(
+    _app_handle: &AppHandle,
+    _app_id: &str,
+    _bytes: &[u8],
+    _install_dir: &Path,
+    _launcher_name: &str,
+) -> Result<(), String> {
+    Err("this catalog entry needs a Windows installer, which isn't supported on this platform"
+        .to_string())
+}
+
+#[cfg(windows)]
 fn install_windows_installer(
     app_handle: &AppHandle,
     app_id: &str,
@@ -516,8 +561,8 @@ fn run_with_timeout(
 ) -> Result<std::process::Output, String> {
     command
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .creation_flags(CREATE_NO_WINDOW);
+        .stderr(std::process::Stdio::piped());
+    process_ext::hide_console(&mut command);
 
     let mut child = command
         .spawn()
@@ -568,6 +613,7 @@ fn run_with_timeout(
     Ok(std::process::Output { status, stdout, stderr })
 }
 
+#[cfg(windows)]
 fn is_probably_windows_exe(bytes: &[u8]) -> bool {
     bytes.len() >= 2 && bytes[0] == b'M' && bytes[1] == b'Z'
 }

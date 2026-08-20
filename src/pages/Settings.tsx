@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import PageHeader from "../components/PageHeader";
 import { AUTO_LOCK_OPTIONS, AutoLockOption } from "../types";
 import { checkDriveEncryption, DriveEncryptionStatus } from "../lib/securityBridge";
+import { getPlatform, getVaultRoot } from "../lib/vaultBridge";
 
 interface SettingsProps {
   onLock: () => void;
@@ -36,6 +37,8 @@ export default function Settings({
 
   const [driveStatus, setDriveStatus] = useState<DriveEncryptionStatus | null>(null);
   const [checkingDrive, setCheckingDrive] = useState(false);
+  const [platform, setPlatform] = useState<string | null>(null);
+  const [vaultRoot, setVaultRoot] = useState<string | null>(null);
 
   async function runDriveCheck() {
     setCheckingDrive(true);
@@ -48,6 +51,8 @@ export default function Settings({
 
   useEffect(() => {
     runDriveCheck();
+    getPlatform().then(setPlatform).catch(() => {});
+    getVaultRoot().then(setVaultRoot).catch(() => {});
   }, []);
 
   return (
@@ -77,14 +82,26 @@ export default function Settings({
             <p className="font-bold">⚠️ This drive isn't encrypted.</p>
             <p className="mt-1">{driveStatus.detail}</p>
             <p className="mt-3 font-semibold">To fix this:</p>
-            <ul className="ml-5 list-disc space-y-1">
-              <li>
-                In File Explorer, right-click this drive and choose{" "}
-                <span className="font-semibold">"Turn on BitLocker"</span> (Windows Pro,
-                Enterprise, or Education).
-              </li>
-              <li>On Windows Home, use VeraCrypt instead — it's free and works on any edition.</li>
-            </ul>
+            {platform === "linux" ? (
+              <ul className="ml-5 list-disc space-y-1">
+                <li>
+                  LUKS encryption has to be set up when the drive is formatted — it can't be added
+                  to a drive that's already in use without erasing it first. Back up the drive,
+                  then re-create it with a tool like GNOME Disks or{" "}
+                  <span className="font-semibold">cryptsetup luksFormat</span>.
+                </li>
+                <li>Restore the backed-up files onto the newly-encrypted drive afterward.</li>
+              </ul>
+            ) : (
+              <ul className="ml-5 list-disc space-y-1">
+                <li>
+                  In File Explorer, right-click this drive and choose{" "}
+                  <span className="font-semibold">"Turn on BitLocker"</span> (Windows Pro,
+                  Enterprise, or Education).
+                </li>
+                <li>On Windows Home, use VeraCrypt instead — it's free and works on any edition.</li>
+              </ul>
+            )}
           </div>
         ) : (
           <div className="neo-card bg-paper p-4 text-sm text-slate-600">
@@ -197,6 +214,20 @@ export default function Settings({
               Last checked: {lastUpdateCheckedAt ? new Date(lastUpdateCheckedAt).toLocaleString() : "Never"}
             </p>
           </div>
+
+          {platform === "linux" && vaultRoot && (
+            <div className="mt-6 border-t border-slate-200 pt-4">
+              <h3 className="mb-3 text-xl font-semibold text-ink">Vault Location</h3>
+              <p className="text-sm text-slate-600">
+                Lockbox isn't installed as a portable exe on Linux, so it can't always default to
+                a folder right next to itself — this is the folder it's using instead, chosen on
+                first run and remembered from here on.
+              </p>
+              <p className="neo-card mt-2 break-all bg-paper p-3 font-mono text-xs text-ink">
+                {vaultRoot}
+              </p>
+            </div>
+          )}
 
           <div className="mt-6 border-t border-slate-200 pt-4">
             <h3 className="mb-3 text-xl font-semibold text-ink">Privacy Mode Transparency</h3>

@@ -60,6 +60,12 @@
           "url": "https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-windows-amd64.exe",
           "archiveType": "binary",
           "launcher": "jq.exe"
+        },
+        "linux": {
+          "url": "https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64",
+          "archiveType": "binary",
+          "sha256": "5942c9b0934e510ee61eb3e30273f1b3fe2590df93933a93d7c58b81d19c8ff5",
+          "launcher": "jq"
         }
       }
     },
@@ -124,6 +130,12 @@
           "archiveType": "zip",
           "sha256": "958234b0669d757b53eacf42bdd5de0fa1cc1ab7527709ddf4f7e29c06a8305f",
           "launcher": "KeePassXC.exe"
+        },
+        "linux": {
+          "url": "https://github.com/keepassxreboot/keepassxc/releases/download/2.7.12/KeePassXC-2.7.12-x86_64.AppImage",
+          "archiveType": "binary",
+          "sha256": "564fe8b751b9ef7aa057e4d3d0b2878db24eaa0f6b1c855c82e699ab0913ae49",
+          "launcher": "KeePassXC.AppImage"
         }
       }
     },
@@ -275,6 +287,12 @@
           "archiveType": "zip",
           "launcher": "peazip_portable-11.2.0.WIN64/peazip.exe",
           "sha256": "fb5c555b470c15e461171a8a0172c2a794f0fb510113440927049815f4f8e546"
+        },
+        "linux": {
+          "url": "https://github.com/peazip/PeaZip/releases/download/11.2.0/peazip_portable-11.2.0.LINUX.GTK2.x86_64.tar.gz",
+          "archiveType": "tar.gz",
+          "launcher": "peazip_portable-11.2.0.LINUX.GTK2.x86_64/peazip",
+          "sha256": "aff93d7d378f7b673e2175d5c933476d28f114ae1cca7040c5f114ebe5bf36ca"
         }
       }
     },

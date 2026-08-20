@@ -3,19 +3,37 @@ use std::fs::{File, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
 
-/// Locates USB_ROOT — the directory holding the Lockbox executable — and
-/// ensures the Vault/Apps/Tools layout exists under it. Every other path in
-/// the app is derived from this value, never from a host-OS path, so the
-/// same drive behaves identically regardless of which Windows machine it's
+/// Locates USB_ROOT — normally the directory holding the Lockbox executable
+/// — and ensures the Vault/Apps/Tools layout exists under it. Every other
+/// path in the app is derived from this value, never from a host-OS path, so
+/// the same drive behaves identically regardless of which machine it's
 /// plugged into.
+///
+/// On Windows this is always the exe's own folder (the portable exe is
+/// always run from a writable location). On Linux, a `.deb` install puts the
+/// exe in a fixed system path like `/usr/bin` that's never writable, so if
+/// the exe's own folder doesn't work, `linux_fallback::resolve` takes over —
+/// see its doc comment.
 pub fn find_usb_root() -> io::Result<PathBuf> {
     let exe_path = std::env::current_exe()?;
-    let root = exe_path
+    let exe_root = exe_path
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| PathBuf::from("."));
-    ensure_layout(&root)?;
-    Ok(root)
+
+    match ensure_layout(&exe_root) {
+        Ok(()) => Ok(exe_root),
+        Err(e) => {
+            #[cfg(target_os = "linux")]
+            {
+                return linux_fallback::resolve(e);
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                Err(e)
+            }
+        }
+    }
 }
 
 fn ensure_layout(root: &Path) -> io::Result<()> {
@@ -82,4 +100,79 @@ pub fn third_party_apps_dir(root: &Path) -> PathBuf {
 
 pub fn tools_dir(root: &Path) -> PathBuf {
     root.join("Tools")
+}
+
+/// Resolves USB_ROOT for a `.deb`-installed Lockbox, where the running exe
+/// lives at a fixed, non-writable system path (e.g. `/usr/bin/lockbox`)
+/// instead of next to a self-contained drive layout the way the Windows
+/// portable exe does. In that case there's no folder to default to, so this
+/// remembers a folder the user picks once: a small JSON config under
+/// `$XDG_CONFIG_HOME/lockbox` (or `~/.config/lockbox` if that's unset) names
+/// the chosen vault folder, checked first on every subsequent launch before
+/// falling back to asking again via a native folder-picker.
+#[cfg(target_os = "linux")]
+mod linux_fallback {
+    use super::{ensure_layout, io, Path, PathBuf};
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Serialize, Deserialize)]
+    struct StoredConfig {
+        vault_root: PathBuf,
+    }
+
+    fn config_path() -> Option<PathBuf> {
+        let config_home = std::env::var_os("XDG_CONFIG_HOME")
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))?;
+        Some(config_home.join("lockbox").join("config.json"))
+    }
+
+    fn load_remembered_root() -> Option<PathBuf> {
+        let raw = std::fs::read_to_string(config_path()?).ok()?;
+        let config: StoredConfig = serde_json::from_str(&raw).ok()?;
+        Some(config.vault_root)
+    }
+
+    fn remember_root(root: &Path) -> io::Result<()> {
+        let path = config_path()
+            .ok_or_else(|| io::Error::other("couldn't determine a config directory (no $HOME set)"))?;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let json = serde_json::to_string_pretty(&StoredConfig {
+            vault_root: root.to_path_buf(),
+        })
+        .map_err(io::Error::other)?;
+        std::fs::write(path, json)
+    }
+
+    /// `original_err` is why the exe's own folder didn't work — folded into
+    /// the final error message if the user cancels the picker, so a
+    /// relaunch-and-retry attempt (from `fatal_startup_error`'s breadcrumb
+    /// log, see lib.rs) explains what happened, not just "no folder chosen."
+    pub(super) fn resolve(original_err: io::Error) -> io::Result<PathBuf> {
+        if let Some(remembered) = load_remembered_root() {
+            if ensure_layout(&remembered).is_ok() {
+                return Ok(remembered);
+            }
+            // The remembered folder is gone or unwritable now (drive
+            // unplugged, moved, etc.) — fall through and ask again rather
+            // than failing permanently on a stale path.
+        }
+
+        let picked = rfd::FileDialog::new()
+            .set_title("Choose a folder for Lockbox's vault")
+            .pick_folder();
+
+        let Some(picked) = picked else {
+            return Err(io::Error::other(format!(
+                "Lockbox is installed system-wide and isn't next to a writable folder \
+                 ({original_err}). Relaunch Lockbox and choose a folder to store the vault in."
+            )));
+        };
+
+        ensure_layout(&picked)?;
+        remember_root(&picked)?;
+        Ok(picked)
+    }
 }

@@ -37,6 +37,20 @@ export function getStorageInfo(): Promise<StorageInfo> {
   return invoke<StorageInfo>("get_storage_info");
 }
 
+// Where the vault actually lives on disk. On Windows this is always next to
+// the running exe; on Linux (see usb_root.rs) it may be a folder the user
+// picked on first run instead.
+export function getVaultRoot(): Promise<string> {
+  return invoke<string>("get_vault_root");
+}
+
+// `std::env::consts::OS` from the backend ("windows" | "linux" | ...) — lets
+// the UI pick platform-specific copy (BitLocker/VeraCrypt vs. LUKS wording,
+// eject phrasing) without a whole OS-detection plugin dependency.
+export function getPlatform(): Promise<string> {
+  return invoke<string>("get_platform");
+}
+
 // Large files cross the IPC boundary in chunks rather than one giant
 // Vec<u8> argument/return value. A single multi-hundred-MB file sent as one
 // shot means building one huge JS array and JSON-(de)serializing it in a

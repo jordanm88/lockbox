@@ -107,7 +107,7 @@ export default function Sidebar({ activeTab, onSelectTab, onLock }: SidebarProps
       <ConfirmDialog
         open={ejectConfirmOpen}
         title="Eject this drive?"
-        description="Lockbox will lock the vault, clean up its own temp files, then close so the drive can be safely removed. Wait for Windows' removal notification before unplugging."
+        description="Lockbox will lock the vault, clean up its own temp files, then close so the drive can be safely removed. Wait for your OS's removal notification before unplugging."
         confirmLabel="Eject"
         cancelLabel="Cancel"
         onConfirm={handleEject}

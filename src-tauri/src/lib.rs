@@ -7,6 +7,7 @@ mod drive_encryption;
 mod eject;
 mod installer;
 mod paths;
+mod process_ext;
 mod rclone;
 mod state;
 mod store_commands;
@@ -15,6 +16,7 @@ mod updates;
 
 use state::AppState;
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 use std::sync::Mutex;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -44,6 +46,8 @@ pub fn run() {
             commands::unlock_vault,
             commands::lock_vault,
             commands::vault_exists,
+            commands::get_vault_root,
+            commands::get_platform,
             commands::get_storage_info,
             commands::create_folder,
             commands::begin_upload,
@@ -85,12 +89,25 @@ pub fn run() {
 /// would fail completely silently from the user's point of view (the app
 /// just doesn't appear). Writing a breadcrumb file next to the executable
 /// means the failure is at least discoverable instead of a silent no-op.
+///
+/// Falls back to the system temp directory if the exe's own folder isn't
+/// writable — true for every `.deb` install on Linux (`/usr/bin`), and
+/// exactly the scenario `usb_root::find_usb_root` itself can fail from (the
+/// user cancelling the vault-folder picker). Without this fallback, that
+/// failure would be entirely silent: no console, and a breadcrumb write that
+/// silently no-ops too.
 fn fatal_startup_error(message: &str) -> ! {
     eprintln!("Lockbox failed to start: {message}");
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let _ = std::fs::write(dir.join("lockbox-startup-error.log"), message);
-        }
-    }
+
+    let breadcrumb_dir = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(Path::to_path_buf))
+        .filter(|dir| std::fs::write(dir.join(".lockbox-write-test"), "").is_ok())
+        .inspect(|dir| {
+            let _ = std::fs::remove_file(dir.join(".lockbox-write-test"));
+        })
+        .unwrap_or_else(std::env::temp_dir);
+
+    let _ = std::fs::write(breadcrumb_dir.join("lockbox-startup-error.log"), message);
     std::process::exit(1);
 }

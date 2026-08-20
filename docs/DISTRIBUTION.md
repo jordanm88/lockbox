@@ -1,7 +1,11 @@
 # Building, packaging, and running Lockbox from a USB drive
 
-Lockbox targets Windows only. This document describes the Windows build and
-distribution flow end to end.
+Lockbox's primary distribution is the Windows portable exe described below —
+a self-contained binary you run straight from a USB drive, with `Vault/` and
+`Apps/` living right next to it. Sections 1 through 3 cover that flow end to
+end. Linux is distributed differently, as a conventional `.deb` package —
+see "Linux (.deb)" near the bottom for how that build works and how it
+differs from the portable-exe model.
 
 ## 1. Build
 
@@ -155,3 +159,93 @@ automatically when packaging onto a USB drive. The durable fix is
 Authenticode code-signing with a trusted certificate, which builds
 SmartScreen reputation over time — not set up here, since it requires a paid
 code-signing certificate that doesn't exist in this project yet.
+
+## Linux (.deb)
+
+Unlike the Windows portable exe, the `.deb` installs Lockbox to a normal,
+fixed system location (`/usr/bin/lockbox`), the same way any other
+apt-installed application works. That means the "just run it from wherever
+the exe sits" trick the Windows build relies on doesn't apply here — see
+"Where the vault lives" below for what happens instead.
+
+### Build
+
+```
+npm ci
+npm run tauri -- build
+```
+
+Or the included helper script:
+
+```bash
+scripts/build-linux.sh
+```
+
+This builds the frontend, runs the Tauri Linux build, and copies the
+resulting `.deb` into `build/`.
+
+> Requires a Rust toolchain (via [rustup](https://rustup.rs/)) plus Tauri's
+> Linux system prerequisites: `pkg-config`, `libwebkit2gtk-4.1-dev`,
+> `libgtk-3-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`,
+> `patchelf`, and `build-essential`. On Debian/Ubuntu:
+> `sudo apt-get install pkg-config libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf build-essential`
+
+This produces `src-tauri/target/release/Lockbox` (the raw Linux binary) and
+`src-tauri/target/release/bundle/deb/*.deb`. CI (`.github/workflows/build.yml`)
+builds this on `ubuntu-22.04` — pinned rather than `ubuntu-latest` so the
+`.deb`'s glibc requirement doesn't creep up whenever GitHub bumps the default
+runner — and every GitHub release attaches the `.deb` alongside the Windows
+artifacts.
+
+### Install
+
+```bash
+sudo dpkg -i lockbox_<version>_amd64.deb
+```
+
+(or double-click it in a file manager that hands `.deb` files to GNOME
+Software/KDE Discover). This installs `lockbox` as a normal application —
+Start Menu-equivalent entry included — with no removable-drive requirement.
+
+### Where the vault lives
+
+On first launch, Lockbox tries to create `Vault/` next to its own binary
+exactly like the Windows build does. Since `/usr/bin` isn't writable, that
+fails, and Lockbox instead asks (via a native folder picker) where to put
+the vault — pick any folder, including a mounted removable drive if you want
+the same "carry it on a USB stick" behavior as Windows. That choice is
+remembered in `~/.config/lockbox/config.json` and reused on every later
+launch without asking again. Settings → "Vault Location" shows the folder
+currently in use. If the remembered folder ever goes missing (e.g. the drive
+it was on isn't plugged in), Lockbox asks again rather than failing outright.
+
+### Cloud Sync needs a system `rclone`
+
+The `.deb` doesn't bundle an `rclone` binary the way a manually-assembled
+portable USB layout can (`Tools/rclone` — see section 2 above). Install it
+from your distro's package manager before using Cloud Sync:
+
+```bash
+sudo apt-get install rclone
+```
+
+### Eject and drive-encryption checks
+
+The Windows build's "Eject USB" button and BitLocker-status check have real
+Linux equivalents rather than just being disabled: eject unmounts and powers
+off the drive via `udisksctl` (the same mechanism a file manager's own
+"Eject" option uses), and the drive-encryption check looks for a LUKS
+(`cryptsetup`) volume via `lsblk` instead of BitLocker. Both correctly report
+"nothing to do here" when the vault is stored under `$HOME` on the main
+disk rather than on a separate removable drive.
+
+### Updates
+
+The in-app updater can't swap a `.deb`-installed binary in place the way it
+swaps the Windows portable exe — that file is owned by `dpkg`, and doing so
+without root would either fail or drift out of sync with what `dpkg` thinks
+is installed. Instead, "Update now" downloads the new release's `.deb` and
+opens it with your desktop's package-install UI (GNOME Software, KDE
+Discover, etc.), which handles the `sudo`/polkit prompt itself — Lockbox
+never runs anything as root. Finish the install there, then relaunch
+Lockbox.

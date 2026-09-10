@@ -37,9 +37,15 @@ tauri-plugin-opener = "2"
 [target.'cfg(target_os = "linux")'.dependencies]
 rfd = { version = "0.15", default-features = false, features = ["gtk3"] }
 
+# opt-level = 3 (speed), not "s"/"z" (size): this is a portable app meant to
+# run comfortably off a USB drive, where a few extra MB on disk costs
+# nothing noticeable, but every unlock runs Argon2id key derivation and
+# every vault operation runs ChaCha20Poly1305 + zip/tar extraction for app
+# installs — all CPU-bound work that a size-optimized build measurably
+# slows down for no benefit here.
 [profile.release]
 panic = "abort"
 codegen-units = 1
 lto = true
-opt-level = "s"
+opt-level = 3
 strip = true

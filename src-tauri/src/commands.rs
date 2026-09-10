@@ -110,18 +110,35 @@ pub struct StorageInfo {
 }
 
 /// Powers the Dropbox/Drive-style storage meter in the sidebar. Vault usage
-/// is an exact sum of what's on disk under Vault/ (encrypted blobs are
-/// within ~28 bytes/file of their plaintext size, close enough to display).
-/// Drive totals come from the filesystem the USB root lives on, so the meter
-/// reflects the actual drive's capacity, not some fixed/fake quota.
+/// is the sum of every file entry's plaintext `size` already recorded in the
+/// vault index (encrypted blobs are within ~28 bytes/file of that, close
+/// enough to display) — not a filesystem walk: the index is decrypted here
+/// anyway, and it's the same data every upload/delete already keeps
+/// accurate, so re-deriving it from disk on every meter refresh (this runs
+/// on a 20s timer — see `StorageMeter.tsx`) was pure wasted I/O that only
+/// got slower as the vault grew. Drive totals still come from the
+/// filesystem the USB root lives on, so the meter reflects the actual
+/// drive's capacity, not some fixed/fake quota.
 ///
-/// `async`: `dir_size` walks the whole vault recursively, which scales with
-/// file count, not just total size — see `store_commands::install_app` for
-/// why a plain `fn` here would otherwise block the main thread.
+/// Only reachable while unlocked (the sidebar that renders `StorageMeter`
+/// doesn't exist until then), so `vault_key` is always `Some` in practice —
+/// the `unwrap_or(0)` fallback is defensive, not an expected path.
 #[tauri::command(async)]
 pub fn get_storage_info(state: State<AppState>) -> Result<StorageInfo, String> {
     let vault_dir = usb_root::vault_dir(&state.root);
-    let vault_used_bytes = dir_size(&vault_dir).unwrap_or(0);
+
+    let vault_used_bytes = lock_recover(&state.vault_key)
+        .as_ref()
+        .and_then(|key| load_index(&vault_dir, key).ok())
+        .map(|index| {
+            index
+                .entries
+                .iter()
+                .filter(|entry| !entry.is_dir)
+                .filter_map(|entry| entry.size)
+                .sum()
+        })
+        .unwrap_or(0);
 
     let drive_total_bytes = fs4::total_space(&state.root).ok();
     let drive_free_bytes = fs4::available_space(&state.root).ok();
@@ -131,20 +148,6 @@ pub fn get_storage_info(state: State<AppState>) -> Result<StorageInfo, String> {
         drive_total_bytes,
         drive_free_bytes,
     })
-}
-
-fn dir_size(path: &Path) -> std::io::Result<u64> {
-    let mut total = 0u64;
-    for entry in fs::read_dir(path)? {
-        let entry = entry?;
-        let metadata = entry.metadata()?;
-        if metadata.is_dir() {
-            total += dir_size(&entry.path())?;
-        } else {
-            total += metadata.len();
-        }
-    }
-    Ok(total)
 }
 
 /// Shared by the chunked upload path below. Takes fully-assembled plaintext

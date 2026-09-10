@@ -21,6 +21,9 @@ use std::sync::Mutex;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "linux")]
+    apply_linux_webview_workarounds();
+
     let root = match usb_root::find_usb_root() {
         Ok(root) => root,
         Err(e) => fatal_startup_error(&format!("Failed to resolve the USB drive layout: {e}")),
@@ -82,6 +85,24 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| fatal_startup_error(&format!("Tauri failed to start: {e}")));
+}
+
+/// WebKitGTK's DMA-BUF renderer (its default since ~2.42) fails to actually
+/// paint anything on a range of Linux setups — proprietary NVIDIA drivers,
+/// several virtualized/software-rendering environments, and notably a lot
+/// of AppImage runs — leaving a window that opens but stays permanently
+/// blank, with nothing in the console to explain why. This is a widely
+/// reported WebKitGTK/Tauri issue on Linux generally, not anything specific
+/// to this app; falling back to the older renderer fixes it. Baked in here
+/// (rather than left as a README troubleshooting note) so it isn't
+/// something every affected user has to independently discover — but only
+/// if they haven't already set it themselves, e.g. to debug the DMA-BUF
+/// path specifically.
+#[cfg(target_os = "linux")]
+fn apply_linux_webview_workarounds() {
+    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
 }
 
 /// A GUI build has `windows_subsystem = "windows"` on Windows, meaning there

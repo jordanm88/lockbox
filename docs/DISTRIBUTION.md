@@ -190,12 +190,15 @@ resulting `.deb` into `build/`.
 > `patchelf`, and `build-essential`. On Debian/Ubuntu:
 > `sudo apt-get install pkg-config libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf build-essential`
 
-This produces `src-tauri/target/release/Lockbox` (the raw Linux binary) and
-`src-tauri/target/release/bundle/deb/*.deb`. CI (`.github/workflows/build.yml`)
-builds this on `ubuntu-22.04` — pinned rather than `ubuntu-latest` so the
-`.deb`'s glibc requirement doesn't creep up whenever GitHub bumps the default
-runner — and every GitHub release attaches the `.deb` alongside the Windows
-artifacts.
+This produces `src-tauri/target/release/Lockbox` (the raw Linux binary) and,
+under `src-tauri/target/release/bundle/`, both `deb/*.deb` and
+`appimage/*.AppImage` (Tauri's bundler builds every target valid for the
+host OS since `tauri.conf.json`'s `bundle.targets` is `"all"`). CI
+(`.github/workflows/build.yml`) builds this on `ubuntu-22.04` — pinned
+rather than `ubuntu-latest` so the `.deb`'s glibc requirement doesn't creep
+up whenever GitHub bumps the default runner — and every GitHub release
+attaches the `.deb` alongside the Windows artifacts; the AppImage is a build
+output but isn't currently attached to releases.
 
 ### Install
 
@@ -206,6 +209,24 @@ sudo dpkg -i lockbox_<version>_amd64.deb
 (or double-click it in a file manager that hands `.deb` files to GNOME
 Software/KDE Discover). This installs `lockbox` as a normal application —
 Start Menu-equivalent entry included — with no removable-drive requirement.
+The AppImage needs no install step: `chmod +x` it and run it directly.
+
+### Blank window on launch (AppImage especially)
+
+If the window opens but stays completely blank — no error, nothing in the
+console — this is WebKitGTK's DMA-BUF renderer failing to paint on your
+GPU/driver combo (common with proprietary NVIDIA drivers, some VM/software
+rendering setups, and disproportionately common under AppImage). It's a
+widely reported WebKitGTK/Tauri issue on Linux in general, not specific to
+Lockbox. `lib.rs::apply_linux_webview_workarounds` sets
+`WEBKIT_DISABLE_DMABUF_RENDERER=1` automatically before Tauri starts, unless
+you've already set that variable yourself, so this shouldn't come up in
+practice — but if it does anyway (e.g. running an older build), set it by
+hand:
+
+```bash
+WEBKIT_DISABLE_DMABUF_RENDERER=1 ./Lockbox.AppImage
+```
 
 ### Where the vault lives
 

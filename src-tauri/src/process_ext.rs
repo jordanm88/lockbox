@@ -19,9 +19,13 @@ pub fn hide_console(_cmd: &mut std::process::Command) {
     // No console to flash on Linux desktops.
 }
 
+// `tokio::process::Command::creation_flags` is an inherent method on
+// Windows (unlike `std::process::Command`'s, which comes from the
+// `std::os::windows::process::CommandExt` trait) — no trait import needed
+// or even accessible here; `tokio::process::CommandExt` exists in tokio's
+// source but isn't publicly re-exported for this to `use`.
 #[cfg(windows)]
 pub fn tokio_hide_console(cmd: &mut tokio::process::Command) {
-    use tokio::process::CommandExt;
     cmd.creation_flags(CREATE_NO_WINDOW);
 }
 

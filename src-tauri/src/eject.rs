@@ -2,6 +2,7 @@ use crate::process_ext;
 use crate::state::{lock_recover, AppState};
 use serde::Serialize;
 use std::path::Path;
+#[cfg(target_os = "linux")]
 use std::process::Stdio;
 use tauri::{AppHandle, State};
 

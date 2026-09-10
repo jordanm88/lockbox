@@ -211,13 +211,35 @@ Start Menu-equivalent entry included — with no removable-drive requirement.
 
 On first launch, Lockbox tries to create `Vault/` next to its own binary
 exactly like the Windows build does. Since `/usr/bin` isn't writable, that
-fails, and Lockbox instead asks (via a native folder picker) where to put
-the vault — pick any folder, including a mounted removable drive if you want
-the same "carry it on a USB stick" behavior as Windows. That choice is
-remembered in `~/.config/lockbox/config.json` and reused on every later
-launch without asking again. Settings → "Vault Location" shows the folder
-currently in use. If the remembered folder ever goes missing (e.g. the drive
-it was on isn't plugged in), Lockbox asks again rather than failing outright.
+fails, and Lockbox instead looks for a vault that's already plugged in — if
+exactly one mounted removable drive (under `/media`, `/run/media`, or
+`/mnt`) already has a `Vault/` on it, that's used automatically with no
+prompt at all. This is what makes a drive set up on Windows "just work" the
+first time it's plugged into a Linux machine, and vice versa: the vault
+format itself (encryption, file index) has no OS dependency, so the only
+thing that ever needed solving was *finding* it. If nothing's found (a
+genuinely fresh drive/folder, or more than one candidate), Lockbox asks via
+a native folder picker instead, starting from wherever it did find a
+removable drive so there's minimal navigating even then. Whatever's chosen
+or found is remembered in `~/.config/lockbox/config.json` and reused on
+every later launch without asking again. Settings → "Vault Location" shows
+the folder currently in use. If the remembered folder ever goes missing
+(e.g. the drive it was on isn't plugged in, or the same drive mounts at a
+different path this time), Lockbox re-detects/asks again rather than
+failing outright.
+
+### Portable apps across OSes
+
+Apps installed through the App Store live at `Apps/<app>/<os>/` (not just
+`Apps/<app>/`), since a Windows build and a Linux build of the same app are
+entirely different binaries — this lets the same drive carry both at once
+without one overwriting the other when you install "the same" app from
+both a Windows machine and a Linux machine. Only catalog entries with a
+`linux` target (see `src-tauri/resources/catalog.json`) are installable on
+Linux at all; anything without one just shows as unavailable there. Apps
+installed by an older Lockbox version, before this per-OS split existed,
+are still found and still launch — this only changes where a fresh
+"Install" click puts new files, not what's already on a drive.
 
 ### Cloud Sync needs a system `rclone`
 

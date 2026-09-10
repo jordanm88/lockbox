@@ -21,19 +21,46 @@ pub struct CatalogEntry {
     install_kind: Option<String>,
 }
 
-/// The catalog's declared launcher path, unless `installer::record_actual_launcher`
-/// recorded a different real location for this app (e.g. because the
-/// archive unpacked into a version-named wrapper folder) — see that
-/// function for why the two can disagree.
+/// The catalog's declared launcher path, resolved to wherever it actually
+/// lives relative to `apps_dir`. Tries the current per-OS install location
+/// first (`<id>/<os>/...` — see `usb_root::app_install_dir`), then falls
+/// back to the older flat `<id>/...` layout every app used before installs
+/// started being split by OS, so an app installed with an earlier version
+/// of Lockbox doesn't suddenly look uninstalled after an update. Within
+/// each layout, `installer::record_actual_launcher`'s recorded path (if
+/// any) wins over the catalog's own declared one — see that function for
+/// why the two can disagree.
 fn effective_launcher_relative(apps_dir: &Path, app_id: &str, catalog_launcher: &str) -> String {
-    let record_path = apps_dir.join(app_id).join(installer::LAUNCHER_RECORD_FILE);
+    let per_os_dir = apps_dir.join(app_id).join(usb_root::APP_OS_SEGMENT);
+    if let Some(relative) = resolved_launcher_in(&per_os_dir, catalog_launcher) {
+        return format!("{app_id}/{}/{relative}", usb_root::APP_OS_SEGMENT);
+    }
+
+    let legacy_dir = apps_dir.join(app_id);
+    if let Some(relative) = resolved_launcher_in(&legacy_dir, catalog_launcher) {
+        return format!("{app_id}/{relative}");
+    }
+
+    // Not installed under either layout — this is where a fresh install
+    // would land, which callers use as the answer either way (e.g. to show
+    // where "Install" will put it, or as a definitely-missing path so an
+    // `.is_file()` check downstream correctly reports "not installed").
+    format!("{app_id}/{}/{catalog_launcher}", usb_root::APP_OS_SEGMENT)
+}
+
+/// The launcher's path relative to `install_dir`, if one is actually found
+/// there — the `installer::record_actual_launcher` record if present, else
+/// the catalog's declared launcher name if that file exists. `None` means
+/// nothing is installed in `install_dir` at all.
+fn resolved_launcher_in(install_dir: &Path, catalog_launcher: &str) -> Option<String> {
+    let record_path = install_dir.join(installer::LAUNCHER_RECORD_FILE);
     if let Ok(recorded) = std::fs::read_to_string(&record_path) {
         let trimmed = recorded.trim();
         if !trimmed.is_empty() {
-            return format!("{app_id}/{trimmed}");
+            return Some(trimmed.to_string());
         }
     }
-    format!("{app_id}/{catalog_launcher}")
+    install_dir.join(catalog_launcher).is_file().then(|| catalog_launcher.to_string())
 }
 
 fn install_kind_label(target: &catalog::TargetSpec) -> String {

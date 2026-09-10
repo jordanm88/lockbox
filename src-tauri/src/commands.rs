@@ -950,17 +950,64 @@ fn write_decrypted_entry(
     fs::write(out_path, plaintext).map_err(|e| format!("failed to write {}: {e}", out_path.display()))
 }
 
+/// The per-OS segment names `app_install_dir` nests catalog installs under
+/// (see `usb_root::APP_OS_SEGMENT`) — both listed here, not just the current
+/// platform's, so `uninstall_app`'s legacy-layout cleanup below knows to
+/// never touch a sibling OS's install sitting alongside legacy files on the
+/// same drive.
+const KNOWN_APP_OS_SEGMENTS: &[&str] = &["windows", "linux"];
+
 // `async`: `remove_dir_all` on a large installed app (hundreds of MB, many
 // files) is a real blocking cost — see `store_commands::install_app` for
 // why a plain `fn` would otherwise block the main thread for it.
 #[tauri::command(async)]
 pub fn uninstall_app(state: State<AppState>, app_id: String) -> Result<(), String> {
     let root = &state.root;
-    let apps_dir = usb_root::apps_dir(root);
-    let target = apps_dir.join(&app_id);
-    if !target.exists() {
+    let app_dir = usb_root::apps_dir(root).join(&app_id);
+    let per_os_dir = usb_root::app_install_dir(root, &app_id);
+
+    if per_os_dir.exists() {
+        fs::remove_dir_all(&per_os_dir).map_err(|e| format!("failed to remove app: {e}"))?;
+        // Tidy the now-possibly-empty <id>/ wrapper, but only if nothing
+        // else — another OS's install, or leftover pre-split files — is
+        // still in it.
+        if fs::read_dir(&app_dir).map(|mut d| d.next().is_none()).unwrap_or(false) {
+            let _ = fs::remove_dir(&app_dir);
+        }
+        return Ok(());
+    }
+
+    if !app_dir.exists() {
         return Err("app not found".to_string());
     }
-    fs::remove_dir_all(&target).map_err(|e| format!("failed to remove app: {e}"))?;
+
+    // No per-OS install for this OS — either this app was installed before
+    // Apps/ started being split by OS (see usb_root::app_install_dir), or
+    // it was only ever installed for a different OS on this same drive.
+    // Remove only files that aren't another OS's install directory, so a
+    // sibling install sitting alongside pre-split files is never touched.
+    for entry in
+        fs::read_dir(&app_dir).map_err(|e| format!("failed to read app directory: {e}"))?
+    {
+        let entry = entry.map_err(|e| format!("failed to read directory entry: {e}"))?;
+        if entry
+            .file_name()
+            .to_str()
+            .is_some_and(|name| KNOWN_APP_OS_SEGMENTS.contains(&name))
+        {
+            continue;
+        }
+        let path = entry.path();
+        let result = if path.is_dir() {
+            fs::remove_dir_all(&path)
+        } else {
+            fs::remove_file(&path)
+        };
+        result.map_err(|e| format!("failed to remove {}: {e}", path.display()))?;
+    }
+
+    if fs::read_dir(&app_dir).map(|mut d| d.next().is_none()).unwrap_or(false) {
+        let _ = fs::remove_dir(&app_dir);
+    }
     Ok(())
 }

@@ -220,8 +220,8 @@ export default function Settings({
               <h3 className="mb-3 text-xl font-semibold text-ink">Vault Location</h3>
               <p className="text-sm text-slate-600">
                 Lockbox isn't installed as a portable exe on Linux, so it can't always default to
-                a folder right next to itself — this is the folder it's using instead, chosen on
-                first run and remembered from here on.
+                a folder right next to itself — this is the folder it's using instead, found
+                automatically or chosen on first run, and remembered from here on.
               </p>
               <p className="neo-card mt-2 break-all bg-paper p-3 font-mono text-xs text-ink">
                 {vaultRoot}

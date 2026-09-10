@@ -89,6 +89,27 @@ pub fn apps_dir(root: &Path) -> PathBuf {
     root.join("Apps")
 }
 
+/// The OS segment `app_install_dir` nests catalog installs under — see its
+/// doc comment for why.
+#[cfg(windows)]
+pub(crate) const APP_OS_SEGMENT: &str = "windows";
+#[cfg(target_os = "linux")]
+pub(crate) const APP_OS_SEGMENT: &str = "linux";
+
+/// Where a catalog-managed app's files for *this* OS live:
+/// `Apps/<id>/<os>/`, not just `Apps/<id>/`. The same physical drive is
+/// meant to move between a Windows machine and a Linux machine, and each OS
+/// needs its own build of a given app — an entirely different binary format,
+/// not just a different file — so nesting installs by OS lets a Windows
+/// install and a Linux install of the same catalog app coexist on one drive
+/// instead of one silently overwriting the other. `store_commands`'s
+/// `effective_launcher_relative` falls back to the older flat `Apps/<id>/`
+/// layout when nothing's found here, so an app installed before this split
+/// existed doesn't suddenly look uninstalled.
+pub fn app_install_dir(root: &Path, app_id: &str) -> PathBuf {
+    apps_dir(root).join(app_id).join(APP_OS_SEGMENT)
+}
+
 /// Home for portable apps the user dropped into place by hand instead of
 /// installing through the App Store — kept separate from `Apps/` so
 /// catalog-managed installs (which the app tracks, updates, and can cleanly
@@ -146,6 +167,55 @@ mod linux_fallback {
         std::fs::write(path, json)
     }
 
+    /// Common Linux removable-media mount roots — desktop environments don't
+    /// agree on a scheme (GNOME/most distros: `/media/<user>/<label>` or
+    /// `/run/media/<user>/<label>`; some setups: `/mnt/<label>`), and the
+    /// same physical drive can even land at a different path on a different
+    /// plug or a different machine. Checked in `find_existing_vault` below,
+    /// and used to bias the folder picker's starting directory so the
+    /// common case — pointing it at a drive that's actually plugged in — is
+    /// as close to zero-navigation as possible.
+    fn candidate_mount_dirs() -> Vec<PathBuf> {
+        let user = std::env::var("USER").or_else(|_| std::env::var("LOGNAME")).ok();
+
+        let mut bases = Vec::new();
+        if let Some(user) = &user {
+            bases.push(PathBuf::from("/run/media").join(user));
+            bases.push(PathBuf::from("/media").join(user));
+        }
+        bases.push(PathBuf::from("/media"));
+        bases.push(PathBuf::from("/mnt"));
+
+        let mut roots = Vec::new();
+        for base in bases {
+            if let Ok(entries) = std::fs::read_dir(&base) {
+                roots.extend(entries.flatten().map(|entry| entry.path()).filter(|p| p.is_dir()));
+            }
+        }
+        roots
+    }
+
+    /// If exactly one currently-mounted removable drive already has a
+    /// Lockbox vault on it, that's almost certainly the drive the user
+    /// means — the common "this same drive was set up on Windows, now
+    /// plugged into this Linux machine" case — so it's used automatically
+    /// with no prompt at all. More than one match is left for the folder
+    /// picker below to disambiguate, since silently guessing wrong here
+    /// would open an unrelated vault instead of erroring loudly.
+    fn find_existing_vault() -> Option<PathBuf> {
+        let matches: Vec<PathBuf> = candidate_mount_dirs()
+            .into_iter()
+            .filter(|root| {
+                root.join("Vault").join(".lockbox").join("vault.meta.json").is_file()
+            })
+            .collect();
+
+        match matches.as_slice() {
+            [single] => Some(single.clone()),
+            _ => None,
+        }
+    }
+
     /// `original_err` is why the exe's own folder didn't work — folded into
     /// the final error message if the user cancels the picker, so a
     /// relaunch-and-retry attempt (from `fatal_startup_error`'s breadcrumb
@@ -160,11 +230,22 @@ mod linux_fallback {
             // than failing permanently on a stale path.
         }
 
-        let picked = rfd::FileDialog::new()
-            .set_title("Choose a folder for Lockbox's vault")
-            .pick_folder();
+        // No remembered choice on this machine yet — before asking, check
+        // whether a vault set up elsewhere (this same drive, a different OS
+        // or machine) is already plugged in and just needs finding.
+        if let Some(found) = find_existing_vault() {
+            if ensure_layout(&found).is_ok() {
+                let _ = remember_root(&found);
+                return Ok(found);
+            }
+        }
 
-        let Some(picked) = picked else {
+        let mut dialog = rfd::FileDialog::new().set_title("Choose a folder for Lockbox's vault");
+        if let Some(hint) = candidate_mount_dirs().into_iter().next() {
+            dialog = dialog.set_directory(hint);
+        }
+
+        let Some(picked) = dialog.pick_folder() else {
             return Err(io::Error::other(format!(
                 "Lockbox is installed system-wide and isn't next to a writable folder \
                  ({original_err}). Relaunch Lockbox and choose a folder to store the vault in."

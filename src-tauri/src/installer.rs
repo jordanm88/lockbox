@@ -93,7 +93,7 @@ pub fn install_app(app_handle: &AppHandle, root: &Path, app_id: &str) -> Result<
         .ok_or_else(|| format!("'{app_id}' has no build for this operating system"))?
         .clone();
 
-    let install_dir = usb_root::apps_dir(root).join(&app.id);
+    let install_dir = usb_root::app_install_dir(root, &app.id);
 
     // Always start from a clean directory: this discards any stale files
     // left over from a previous version of this app, and it gives failure

@@ -87,21 +87,32 @@ pub fn run() {
         .unwrap_or_else(|e| fatal_startup_error(&format!("Tauri failed to start: {e}")));
 }
 
-/// WebKitGTK's DMA-BUF renderer (its default since ~2.42) fails to actually
-/// paint anything on a range of Linux setups — proprietary NVIDIA drivers,
-/// several virtualized/software-rendering environments, and notably a lot
-/// of AppImage runs — leaving a window that opens but stays permanently
-/// blank, with nothing in the console to explain why. This is a widely
-/// reported WebKitGTK/Tauri issue on Linux generally, not anything specific
-/// to this app; falling back to the older renderer fixes it. Baked in here
-/// (rather than left as a README troubleshooting note) so it isn't
-/// something every affected user has to independently discover — but only
-/// if they haven't already set it themselves, e.g. to debug the DMA-BUF
-/// path specifically.
+/// WebKitGTK disagreeing with the graphics driver is a widely reported
+/// Tauri-on-Linux issue, not anything specific to this app — see Tauri's own
+/// "Linux Graphics Issues" troubleshooting page
+/// (https://v2.tauri.app/develop/debug/linux-graphics/), which is exactly
+/// where these three variables and their ordering come from. Symptoms range
+/// from a window that opens but stays permanently blank (DMA-BUF framebuffer
+/// errors) to a Wayland "Error 71" crash to a crash specifically on resize —
+/// all with nothing informative in the console. Applied in order from
+/// least to most aggressive; unlike the first two, `WEBKIT_DISABLE_COMPOSITING_MODE`
+/// disables *all* accelerated compositing (a real performance cost, not just
+/// a narrow workaround), but a working-and-slower app beats a blank one, and
+/// this is the documented last resort once the milder two haven't been
+/// enough. All three are baked in here rather than left as a README
+/// troubleshooting note so affected users don't have to independently
+/// discover and set them — but only ever set-if-unset, so setting any of
+/// them yourself (e.g. to debug one specifically) is always respected.
 #[cfg(target_os = "linux")]
 fn apply_linux_webview_workarounds() {
-    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
-        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    for (var, value) in [
+        ("__NV_DISABLE_EXPLICIT_SYNC", "1"),
+        ("WEBKIT_DISABLE_DMABUF_RENDERER", "1"),
+        ("WEBKIT_DISABLE_COMPOSITING_MODE", "1"),
+    ] {
+        if std::env::var_os(var).is_none() {
+            std::env::set_var(var, value);
+        }
     }
 }
 

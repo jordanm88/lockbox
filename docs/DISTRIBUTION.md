@@ -197,8 +197,8 @@ host OS since `tauri.conf.json`'s `bundle.targets` is `"all"`). CI
 (`.github/workflows/build.yml`) builds this on `ubuntu-22.04` — pinned
 rather than `ubuntu-latest` so the `.deb`'s glibc requirement doesn't creep
 up whenever GitHub bumps the default runner — and every GitHub release
-attaches the `.deb` alongside the Windows artifacts; the AppImage is a build
-output but isn't currently attached to releases.
+attaches both the `.deb` and the `.AppImage` alongside the Windows
+artifacts.
 
 ### Install
 
@@ -214,19 +214,28 @@ The AppImage needs no install step: `chmod +x` it and run it directly.
 ### Blank window on launch (AppImage especially)
 
 If the window opens but stays completely blank — no error, nothing in the
-console — this is WebKitGTK's DMA-BUF renderer failing to paint on your
-GPU/driver combo (common with proprietary NVIDIA drivers, some VM/software
-rendering setups, and disproportionately common under AppImage). It's a
-widely reported WebKitGTK/Tauri issue on Linux in general, not specific to
-Lockbox. `lib.rs::apply_linux_webview_workarounds` sets
-`WEBKIT_DISABLE_DMABUF_RENDERER=1` automatically before Tauri starts, unless
-you've already set that variable yourself, so this shouldn't come up in
-practice — but if it does anyway (e.g. running an older build), set it by
-hand:
+console — this is WebKitGTK disagreeing with your GPU/driver combo (common
+with proprietary NVIDIA drivers, some VM/software rendering setups, and
+disproportionately common under AppImage). It's a widely reported
+WebKitGTK/Tauri issue on Linux in general, not specific to Lockbox — see
+Tauri's own [Linux Graphics
+Issues](https://v2.tauri.app/develop/debug/linux-graphics/) troubleshooting
+page. `lib.rs::apply_linux_webview_workarounds` sets all three of that
+page's documented workarounds automatically before Tauri starts (unless
+you've already set any of them yourself), so this shouldn't come up in
+practice — but if it does anyway (e.g. running an older build), set them by
+hand, in this order (each is a bigger hammer than the last):
 
 ```bash
+__NV_DISABLE_EXPLICIT_SYNC=1 ./Lockbox.AppImage
 WEBKIT_DISABLE_DMABUF_RENDERER=1 ./Lockbox.AppImage
+WEBKIT_DISABLE_COMPOSITING_MODE=1 ./Lockbox.AppImage
 ```
+
+If none of these help, run it from a terminal and check for anything
+printed to stdout/stderr (a crash or an explicit error is a different,
+more specific problem than the blank-window graphics issue these variables
+address) — worth including if you end up filing an issue.
 
 ### Where the vault lives
 

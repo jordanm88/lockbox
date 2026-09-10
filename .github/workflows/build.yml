@@ -99,11 +99,13 @@ jobs:
           path: artifacts
 
       # Attaches the portable exe plus the MSI and NSIS installer from
-      # `bundle/`, and the Linux `.deb`, so a release covers every
-      # distribution form built above. The in-app self-updater (updates.rs)
-      # only ever picks the portable exe on Windows or the `.deb` on Linux —
-      # it explicitly skips anything with "setup"/"installer" in the name on
-      # Windows — so adding the installers here doesn't affect it (see
+      # `bundle/`, and the Linux `.deb` and `.AppImage`, so a release covers
+      # every distribution form built above. The in-app self-updater
+      # (updates.rs) only ever picks the portable exe on Windows or the
+      # `.deb` on Linux — it explicitly skips anything with
+      # "setup"/"installer" in the name on Windows, and never looks at the
+      # AppImage at all — so adding the installers/AppImage here doesn't
+      # affect it (see
       # docs/DISTRIBUTION.md). The binary is always `Lockbox.exe` (matching
       # Cargo.toml's `[[bin]] name`) — an earlier version of this workflow
       # also matched a lowercase `lockbox.exe` pattern on the theory that
@@ -130,6 +132,7 @@ jobs:
             artifacts/**/bundle/msi/*.msi
             artifacts/**/bundle/nsis/*.exe
             artifacts/**/bundle/deb/*.deb
+            artifacts/**/bundle/appimage/*.AppImage
 
   # The normal release path: every push to main checks whether
   # package.json's version has moved past the last tag, and if so, creates
@@ -191,6 +194,7 @@ jobs:
             artifacts/**/bundle/msi/*.msi
             artifacts/**/bundle/nsis/*.exe
             artifacts/**/bundle/deb/*.deb
+            artifacts/**/bundle/appimage/*.AppImage
 
   publish_optional:
     needs: build
@@ -214,3 +218,4 @@ jobs:
             artifacts/**/bundle/msi/*.msi
             artifacts/**/bundle/nsis/*.exe
             artifacts/**/bundle/deb/*.deb
+            artifacts/**/bundle/appimage/*.AppImage

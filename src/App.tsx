@@ -395,6 +395,29 @@ export default function App() {
     };
   }, [unlocked, autoLockOption]);
 
+  // Ctrl/Cmd+Shift+L: lock immediately, for when someone's walking up and
+  // there's no time to click through the sidebar — a manual complement to
+  // the automatic locks above (inactivity, drive removal). A modifier
+  // chord, not a bare key, specifically so it still fires no matter what
+  // has focus (an input, a button, nothing) rather than being swallowed the
+  // way a bare keypress would be while typing — the same reasoning browsers
+  // apply to their own Ctrl+S-style shortcuts. Shift is included (not just
+  // Ctrl/Cmd+L) to stay clear of the browser/OS bindings some environments
+  // already put on the bare combo.
+  useEffect(() => {
+    if (!unlocked) return;
+
+    function handleKeydown(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "l") {
+        event.preventDefault();
+        handleLock();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeydown);
+    return () => window.removeEventListener("keydown", handleKeydown);
+  }, [unlocked]);
+
   // The one and only place that decides "an update was found" — used by
   // both the silent background timer below and the manual "Update now"
   // button in Settings, so neither path can ever apply an update without

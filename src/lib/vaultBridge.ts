@@ -19,6 +19,14 @@ export function lockVault(): Promise<void> {
   return invoke<void>("lock_vault");
 }
 
+// Re-encrypts every blob and the index under a new passphrase — see
+// change_passphrase in commands.rs for why this can't be a lightweight
+// operation. Rejects with a message if currentPassphrase is wrong, so the
+// caller can show that inline rather than treating it as a generic failure.
+export function changePassphrase(currentPassphrase: string, newPassphrase: string): Promise<void> {
+  return invoke<void>("change_passphrase", { currentPassphrase, newPassphrase });
+}
+
 export function listVaultFiles(): Promise<VaultFileEntry[]> {
   return invoke<VaultFileEntry[]>("list_vault_files");
 }

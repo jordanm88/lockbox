@@ -18,6 +18,13 @@ pub struct AppState {
     /// True while an `rclone sync` is running, so a second click can't start
     /// a second sync against the same Vault directory concurrently.
     pub sync_in_progress: Mutex<bool>,
+    /// True while `change_passphrase` is re-encrypting the vault, so a
+    /// second call (e.g. a double-clicked button) can't start a second
+    /// re-encryption pass racing the first one over the same blobs. Doesn't
+    /// guard against an *unrelated* command (an upload, a delete) landing
+    /// mid-reencryption — that narrower race is accepted, not solved, for
+    /// now; see `commands::change_passphrase`.
+    pub changing_passphrase: Mutex<bool>,
     /// In-progress chunked uploads, keyed by a random session id. Bytes only
     /// land here in memory — nothing touches the vault until `finish_upload`
     /// completes, so a crash or abandoned upload never leaves a partial file.

@@ -70,6 +70,7 @@ pub fn run() {
             vault_key: Mutex::new(None),
             installing_apps: Mutex::new(HashSet::new()),
             sync_in_progress: Mutex::new(false),
+            changing_passphrase: Mutex::new(false),
             uploads: Mutex::new(HashMap::new()),
             downloads: Mutex::new(HashMap::new()),
             third_party_scan_cache: Mutex::new(HashMap::new()),
@@ -77,6 +78,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::unlock_vault,
             commands::lock_vault,
+            commands::change_passphrase,
             commands::vault_exists,
             commands::get_vault_root,
             commands::get_platform,

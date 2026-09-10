@@ -104,6 +104,60 @@ fn create_vault(vault_dir: &Path, passphrase: &str) -> Result<VaultKey, String> 
     Ok(key)
 }
 
+/// Generates a fresh salt + verifier for `new_passphrase` and writes it to a
+/// staging file *next to* the real vault metadata — never to the real path
+/// itself. See `commands::change_passphrase` for why: nothing about the
+/// vault's real, working credentials changes until every blob and the index
+/// have *also* been staged under the new key, so a passphrase change
+/// interrupted partway through leaves the vault exactly as readable under
+/// the old passphrase as it was before it started — safe to just retry.
+pub fn stage_new_credentials(vault_dir: &Path, new_passphrase: &str) -> Result<(VaultKey, PathBuf), String> {
+    let mut salt = [0u8; SALT_LEN];
+    OsRng.fill_bytes(&mut salt);
+
+    let key = derive_key(new_passphrase, &salt)?;
+    let cipher = key.cipher();
+
+    let mut nonce_bytes = [0u8; NONCE_LEN];
+    OsRng.fill_bytes(&mut nonce_bytes);
+    let nonce = Nonce::from_slice(&nonce_bytes);
+
+    let verifier_ciphertext = cipher
+        .encrypt(nonce, VERIFIER_PLAINTEXT)
+        .map_err(|e| format!("failed to prepare new credentials: {e}"))?;
+
+    let meta = VaultMeta {
+        salt: salt.to_vec(),
+        verifier_nonce: nonce_bytes.to_vec(),
+        verifier_ciphertext,
+    };
+
+    let mut staged_path = meta_path(vault_dir).into_os_string();
+    staged_path.push(".new");
+    let staged_path = PathBuf::from(staged_path);
+
+    if let Some(parent) = staged_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("failed to create vault metadata directory: {e}"))?;
+    }
+    let serialized = serde_json::to_vec(&meta)
+        .map_err(|e| format!("failed to serialize new vault metadata: {e}"))?;
+    fs::write(&staged_path, serialized)
+        .map_err(|e| format!("failed to stage new vault metadata: {e}"))?;
+
+    Ok((key, staged_path))
+}
+
+/// Finalizes a passphrase change by atomically swapping the staged metadata
+/// (from [`stage_new_credentials`]) into place. Call this only after every
+/// blob and the index have *also* been re-encrypted and swapped in under
+/// the new key — deliberately the very last step of the whole operation,
+/// since this is what actually makes the new passphrase "real."
+pub fn commit_new_credentials(vault_dir: &Path, staged_path: &Path) -> Result<(), String> {
+    fs::rename(staged_path, meta_path(vault_dir))
+        .map_err(|e| format!("failed to finalize new vault metadata: {e}"))
+}
+
 /// Encrypts `plaintext` and returns `nonce || ciphertext`, ready to write to
 /// disk as-is.
 pub fn encrypt_bytes(key: &VaultKey, plaintext: &[u8]) -> Result<Vec<u8>, String> {

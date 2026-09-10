@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import PageHeader from "../components/PageHeader";
 import { AUTO_LOCK_OPTIONS, AutoLockOption } from "../types";
 import { checkDriveEncryption, DriveEncryptionStatus } from "../lib/securityBridge";
-import { getPlatform, getVaultRoot } from "../lib/vaultBridge";
+import { changePassphrase, getPlatform, getVaultRoot } from "../lib/vaultBridge";
+import { getErrorMessage } from "../lib/errors";
 
 interface SettingsProps {
   onLock: () => void;
@@ -34,6 +35,43 @@ export default function Settings({
   const [currentPass, setCurrentPass] = useState("");
   const [newPass, setNewPass] = useState("");
   const [confirmPass, setConfirmPass] = useState("");
+  const [changingPassphrase, setChangingPassphrase] = useState(false);
+  const [passphraseStatus, setPassphraseStatus] = useState<{ kind: "ok" | "error"; text: string } | null>(
+    null,
+  );
+
+  async function handleChangePassphrase() {
+    setPassphraseStatus(null);
+
+    if (!currentPass || !newPass) {
+      setPassphraseStatus({ kind: "error", text: "Enter your current and new passphrase." });
+      return;
+    }
+    if (newPass !== confirmPass) {
+      setPassphraseStatus({ kind: "error", text: "New passphrase and confirmation don't match." });
+      return;
+    }
+    if (newPass === currentPass) {
+      setPassphraseStatus({ kind: "error", text: "New passphrase must be different from the current one." });
+      return;
+    }
+
+    setChangingPassphrase(true);
+    try {
+      await changePassphrase(currentPass, newPass);
+      setCurrentPass("");
+      setNewPass("");
+      setConfirmPass("");
+      setPassphraseStatus({ kind: "ok", text: "Passphrase changed." });
+    } catch (err) {
+      setPassphraseStatus({
+        kind: "error",
+        text: getErrorMessage(err, "Failed to change passphrase."),
+      });
+    } finally {
+      setChangingPassphrase(false);
+    }
+  }
 
   const [driveStatus, setDriveStatus] = useState<DriveEncryptionStatus | null>(null);
   const [checkingDrive, setCheckingDrive] = useState(false);
@@ -128,6 +166,7 @@ export default function Settings({
               <span className="mb-1 block text-sm font-semibold text-slate-700">Current Passphrase</span>
               <input
                 type="password"
+                autoComplete="current-password"
                 value={currentPass}
                 onChange={(event) => setCurrentPass(event.target.value)}
                 className="neo-input w-full px-4 py-2"
@@ -137,6 +176,7 @@ export default function Settings({
               <span className="mb-1 block text-sm font-semibold text-slate-700">New Passphrase</span>
               <input
                 type="password"
+                autoComplete="new-password"
                 value={newPass}
                 onChange={(event) => setNewPass(event.target.value)}
                 className="neo-input w-full px-4 py-2"
@@ -146,14 +186,29 @@ export default function Settings({
               <span className="mb-1 block text-sm font-semibold text-slate-700">Confirm New Passphrase</span>
               <input
                 type="password"
+                autoComplete="new-password"
                 value={confirmPass}
                 onChange={(event) => setConfirmPass(event.target.value)}
                 className="neo-input w-full px-4 py-2"
               />
             </label>
           </div>
-          <button type="button" className="neo-btn mt-6 w-full bg-neo-blue py-3 text-white">
-            Update Passphrase
+          {passphraseStatus && (
+            <p
+              className={`mt-3 text-sm font-medium ${
+                passphraseStatus.kind === "ok" ? "text-emerald-700" : "text-red-600"
+              }`}
+            >
+              {passphraseStatus.text}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={handleChangePassphrase}
+            disabled={changingPassphrase}
+            className="neo-btn mt-6 w-full bg-neo-blue py-3 text-white disabled:opacity-60"
+          >
+            {changingPassphrase ? "Changing…" : "Update Passphrase"}
           </button>
         </div>
 

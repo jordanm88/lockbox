@@ -77,6 +77,153 @@ pub fn lock_vault(state: State<AppState>) -> Result<(), String> {
     Ok(())
 }
 
+/// Changes the vault's passphrase. Every blob is encrypted directly with the
+/// key derived from the passphrase — there's no separate data-encryption
+/// key wrapped by it — so unlike, say, most password managers, this can't
+/// just re-wrap one small secret: it has to re-encrypt every single file in
+/// the vault, plus the index, under the new key.
+///
+/// That's real work that can fail partway through (disk full, drive pulled,
+/// process killed), so everything is staged under `.new`-suffixed sibling
+/// files first — nothing touches a real, working file until every blob,
+/// the index, *and* the metadata have all been successfully re-encrypted.
+/// Only then are they swapped into place with a run of renames (each
+/// individually atomic). If anything fails before that swap phase, every
+/// staged file is cleaned up and the vault is left exactly as it was,
+/// fully readable under the old passphrase — safe to just retry. The
+/// remaining, much smaller risk window is the swap phase itself (a crash
+/// between renaming the first and last file) — see the ordering note below
+/// for why blobs go first and the metadata commits last.
+///
+/// `async`: re-encrypting every blob in a large vault is real, scaling
+/// work — see `store_commands::install_app` for why a plain `fn` would
+/// otherwise block the main thread for all of it.
+#[tauri::command(async)]
+pub fn change_passphrase(
+    state: State<AppState>,
+    current_passphrase: String,
+    new_passphrase: String,
+) -> Result<(), String> {
+    // Reject a second concurrent call rather than letting two re-encryption
+    // passes race over the same blobs — same guard shape as
+    // `cloud_commands::sync_vault_now`'s `sync_in_progress`.
+    {
+        let mut in_progress = lock_recover(&state.changing_passphrase);
+        if *in_progress {
+            return Err("a passphrase change is already in progress".to_string());
+        }
+        *in_progress = true;
+    }
+
+    let result = change_passphrase_inner(&state, &current_passphrase, &new_passphrase);
+
+    *lock_recover(&state.changing_passphrase) = false;
+
+    result
+}
+
+fn change_passphrase_inner(
+    state: &AppState,
+    current_passphrase: &str,
+    new_passphrase: &str,
+) -> Result<(), String> {
+    if new_passphrase.is_empty() {
+        return Err("new passphrase must not be empty".to_string());
+    }
+
+    let vault_dir = usb_root::vault_dir(&state.root);
+
+    // Re-verified against the vault's own stored credentials, not just
+    // trusted from whatever's cached in memory — a typo here has to fail
+    // loudly and immediately, before anything is touched, rather than
+    // silently starting to re-encrypt under a key derived from the wrong
+    // old passphrase (which would make every blob permanently
+    // un-decryptable — there's no "undo" once that starts).
+    let old_key = crypto::unlock(&vault_dir, current_passphrase)?
+        .ok_or_else(|| "current passphrase is incorrect".to_string())?;
+
+    let index = load_or_upgrade_index(&vault_dir, &old_key)?;
+    let data_dir = data_dir(&vault_dir);
+
+    let (new_key, staged_meta_path) = crypto::stage_new_credentials(&vault_dir, new_passphrase)?;
+
+    let mut staged_blobs: Vec<(PathBuf, PathBuf)> = Vec::new();
+    macro_rules! abort_and_cleanup {
+        ($err:expr) => {{
+            for (_, staged) in &staged_blobs {
+                let _ = fs::remove_file(staged);
+            }
+            let _ = fs::remove_file(&staged_meta_path);
+            return Err($err);
+        }};
+    }
+
+    for entry in &index.entries {
+        let Some(blob_name) = &entry.blob_name else { continue };
+        let real_path = data_dir.join(blob_name);
+        let mut staged_path = real_path.clone().into_os_string();
+        staged_path.push(".new");
+        let staged_path = PathBuf::from(staged_path);
+
+        let result = fs::read(&real_path)
+            .map_err(|e| format!("failed to read {blob_name}: {e}"))
+            .and_then(|sealed| crypto::decrypt_bytes(&old_key, &sealed))
+            .and_then(|plaintext| crypto::encrypt_bytes(&new_key, &plaintext))
+            .and_then(|resealed| {
+                fs::write(&staged_path, resealed)
+                    .map_err(|e| format!("failed to stage re-encrypted {blob_name}: {e}"))
+            });
+
+        match result {
+            Ok(()) => staged_blobs.push((real_path, staged_path)),
+            Err(e) => abort_and_cleanup!(e),
+        }
+    }
+
+    // The index gets re-encrypted (not re-derived) the same way every other
+    // command reads/writes it — serialize, encrypt, write — just staged
+    // like the blobs above instead of going straight to the real path.
+    let staged_index_path = {
+        let mut p = index_path(&vault_dir).into_os_string();
+        p.push(".new");
+        PathBuf::from(p)
+    };
+    let serialized = match serde_json::to_vec(&index) {
+        Ok(bytes) => bytes,
+        Err(e) => abort_and_cleanup!(format!("failed to serialize vault index: {e}")),
+    };
+    let sealed_index = match crypto::encrypt_bytes(&new_key, &serialized) {
+        Ok(sealed) => sealed,
+        Err(e) => abort_and_cleanup!(e),
+    };
+    if let Err(e) = fs::write(&staged_index_path, sealed_index) {
+        abort_and_cleanup!(format!("failed to stage re-encrypted index: {e}"));
+    }
+
+    // Everything staged successfully — swap it all into place. Blobs and
+    // the index first, the metadata last: the metadata is what actually
+    // makes the new passphrase "real" (it's the only thing `crypto::unlock`
+    // checks), so committing it last means the tiny window where a crash
+    // mid-swap could leave things inconsistent always favors the old
+    // passphrase still working, never the new passphrase "succeeding"
+    // against a vault that's only partly re-encrypted.
+    for (real_path, staged_path) in &staged_blobs {
+        fs::rename(staged_path, real_path).map_err(|e| {
+            format!(
+                "failed partway through finalizing the passphrase change: {e}. Some files may now \
+                 be re-encrypted and some not — do not delete anything; try changing the \
+                 passphrase again, or restore from a backup if problems persist."
+            )
+        })?;
+    }
+    fs::rename(&staged_index_path, index_path(&vault_dir))
+        .map_err(|e| format!("failed to finalize the re-encrypted index: {e}"))?;
+    crypto::commit_new_credentials(&vault_dir, &staged_meta_path)?;
+
+    *lock_recover(&state.vault_key) = Some(new_key);
+    Ok(())
+}
+
 #[tauri::command]
 pub fn vault_exists(state: State<AppState>) -> Result<bool, String> {
     let vault_dir = usb_root::vault_dir(&state.root);

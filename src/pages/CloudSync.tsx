@@ -101,10 +101,10 @@ function Field({
 function StatusBadge({ status }: { status: SyncStatus }) {
   const variants: Record<SyncStatus, { label: string; className: string }> = {
     idle: { label: "Never synced", className: "bg-slate-100 text-slate-600" },
-    running: { label: "Syncing…", className: "bg-amber-100 text-amber-700" },
-    success: { label: "✓ Synced", className: "bg-emerald-100 text-emerald-700" },
-    skipped: { label: "⚠ Nothing to sync", className: "bg-amber-100 text-amber-700" },
-    failed: { label: "✗ Failed", className: "bg-red-100 text-red-700" },
+    running: { label: "Syncing…", className: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400" },
+    success: { label: "✓ Synced", className: "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400" },
+    skipped: { label: "⚠ Nothing to sync", className: "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400" },
+    failed: { label: "✗ Failed", className: "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400" },
   };
   const { label, className } = variants[status];
   return <span className={`rounded-full px-3 py-1 text-sm font-semibold ${className}`}>{label}</span>;
@@ -295,8 +295,8 @@ export default function CloudSync({
               </p>
 
               {lastErrorDetail && (
-                <div className="neo-card bg-red-50 p-3">
-                  <p className="text-sm font-semibold text-red-700">Last error: {lastErrorDetail}</p>
+                <div className="neo-card bg-red-50 dark:bg-red-950/40 p-3">
+                  <p className="text-sm font-semibold text-red-700 dark:text-red-400">Last error: {lastErrorDetail}</p>
                   {lastAction && (
                     <button type="button" onClick={() => onRetryLastAction(config)} disabled={busy} className="neo-btn mt-2 bg-neo-red px-3 py-2 text-white">
                       Retry {lastAction === "sync" ? "sync" : lastAction === "restore" ? "restore" : "connection test"}
@@ -314,7 +314,7 @@ export default function CloudSync({
             <StatusBadge status={syncStatus} />
           </div>
           {syncStatus === "skipped" && (
-            <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+            <p className="mb-4 rounded-lg bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-xs font-medium text-amber-800 dark:text-amber-300">
               Nothing was transferred — both the vault and the remote destination are empty, so
               there was nothing to copy. This is not the same as a completed backup.
             </p>
@@ -339,7 +339,7 @@ export default function CloudSync({
           </button>
           {restoreStatus !== "idle" && (
             <p
-              className={`mb-4 text-xs font-medium ${restoreStatus === "success" ? "text-emerald-700" : restoreStatus === "failed" ? "text-red-700" : "text-slate-500"}`}
+              className={`mb-4 text-xs font-medium ${restoreStatus === "success" ? "text-emerald-700 dark:text-emerald-400" : restoreStatus === "failed" ? "text-red-700 dark:text-red-400" : "text-slate-500"}`}
             >
               {restoreStatus === "running"
                 ? "Pulling files down from the remote…"
@@ -393,7 +393,7 @@ export default function CloudSync({
                   Last auto-sync: {lastAutoSyncAt ? new Date(lastAutoSyncAt).toLocaleString() : "Not yet run"}
                 </p>
                 {lastAutoSyncError && (
-                  <p className="rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700">
+                  <p className="rounded-lg bg-red-50 dark:bg-red-950/40 px-2.5 py-1.5 text-xs font-medium text-red-700 dark:text-red-400">
                     Last auto-sync error: {lastAutoSyncError}
                   </p>
                 )}

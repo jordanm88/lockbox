@@ -25,3 +25,14 @@ export const AUTO_LOCK_MINUTES: Record<AutoLockOption, number | null> = {
   "15 minutes": 15,
   Never: null,
 };
+
+export const TRASH_RETENTION_OPTIONS = ["7 days", "30 days", "90 days", "Never"] as const;
+export type TrashRetentionOption = (typeof TRASH_RETENTION_OPTIONS)[number];
+
+/** Days a trashed item is kept before auto-expiry purges it; `null` means disabled. */
+export const TRASH_RETENTION_DAYS: Record<TrashRetentionOption, number | null> = {
+  "7 days": 7,
+  "30 days": 30,
+  "90 days": 90,
+  Never: null,
+};

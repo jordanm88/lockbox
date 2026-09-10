@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import PageHeader from "../components/PageHeader";
-import { AUTO_LOCK_OPTIONS, AutoLockOption } from "../types";
+import { AUTO_LOCK_OPTIONS, AutoLockOption, TRASH_RETENTION_OPTIONS, TrashRetentionOption } from "../types";
 import { checkDriveEncryption, DriveEncryptionStatus } from "../lib/securityBridge";
 import {
   changePassphrase,
@@ -13,12 +13,15 @@ import {
   VaultVerifyReport,
 } from "../lib/vaultBridge";
 import { getEffectiveTheme, setTheme } from "../lib/theme";
+import { passphraseStrengthBarColor, passphraseStrengthTextColor, scorePassphrase } from "../lib/passphraseStrength";
 import { getErrorMessage } from "../lib/errors";
 
 interface SettingsProps {
   onLock: () => void;
   autoLockOption: AutoLockOption;
   onChangeAutoLockOption: (option: AutoLockOption) => void;
+  trashRetentionOption: TrashRetentionOption;
+  onChangeTrashRetentionOption: (option: TrashRetentionOption) => void;
   autoUpdateEnabled: boolean;
   onChangeAutoUpdateEnabled: (enabled: boolean) => void;
   // Checking for an update never applies one — App.tsx owns the single
@@ -35,6 +38,8 @@ export default function Settings({
   onLock,
   autoLockOption,
   onChangeAutoLockOption,
+  trashRetentionOption,
+  onChangeTrashRetentionOption,
   autoUpdateEnabled,
   onChangeAutoUpdateEnabled,
   onCheckForUpdateNow,
@@ -49,6 +54,8 @@ export default function Settings({
   const [passphraseStatus, setPassphraseStatus] = useState<{ kind: "ok" | "error"; text: string } | null>(
     null,
   );
+
+  const passphraseStrength = scorePassphrase(newPass);
 
   const [verifying, setVerifying] = useState(false);
   const [verifyReport, setVerifyReport] = useState<VaultVerifyReport | null>(null);
@@ -187,12 +194,12 @@ export default function Settings({
         {checkingDrive && !driveStatus ? (
           <p className="text-sm font-medium text-slate-500">Checking…</p>
         ) : driveStatus?.protected === true ? (
-          <div className="neo-card border-l-4 border-l-emerald-500 bg-emerald-50 p-4 text-sm text-emerald-800">
+          <div className="neo-card border-l-4 border-l-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 p-4 text-sm text-emerald-800 dark:text-emerald-300">
             <p className="font-bold">✅ This drive is protected.</p>
             <p className="mt-1">{driveStatus.detail}</p>
           </div>
         ) : driveStatus?.protected === false ? (
-          <div className="neo-card border-l-4 border-l-red-500 bg-red-50 p-4 text-sm text-red-800">
+          <div className="neo-card border-l-4 border-l-red-500 bg-red-50 dark:bg-red-950/40 p-4 text-sm text-red-800 dark:text-red-300">
             <p className="font-bold">⚠️ This drive isn't encrypted.</p>
             <p className="mt-1">{driveStatus.detail}</p>
             <p className="mt-3 font-semibold">To fix this:</p>
@@ -243,7 +250,7 @@ export default function Settings({
         </p>
 
         {verifyError && (
-          <div className="neo-card border-l-4 border-l-red-500 bg-red-50 p-4 text-sm text-red-800">
+          <div className="neo-card border-l-4 border-l-red-500 bg-red-50 dark:bg-red-950/40 p-4 text-sm text-red-800 dark:text-red-300">
             <p className="font-bold">⚠️ Verification failed to run.</p>
             <p className="mt-1">{verifyError}</p>
           </div>
@@ -253,8 +260,8 @@ export default function Settings({
           <div
             className={`neo-card p-4 text-sm ${
               verifyReport.broken.length === 0
-                ? "border-l-4 border-l-emerald-500 bg-emerald-50 text-emerald-800"
-                : "border-l-4 border-l-red-500 bg-red-50 text-red-800"
+                ? "border-l-4 border-l-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300"
+                : "border-l-4 border-l-red-500 bg-red-50 dark:bg-red-950/40 text-red-800 dark:text-red-300"
             }`}
           >
             <p className="font-bold">
@@ -313,6 +320,23 @@ export default function Settings({
                 onChange={(event) => setNewPass(event.target.value)}
                 className="neo-input w-full px-4 py-2"
               />
+              {newPass && (
+                <div className="mt-1.5">
+                  <div className="flex gap-1">
+                    {[0, 1, 2, 3].map((i) => (
+                      <div
+                        key={i}
+                        className={`h-1.5 flex-1 rounded-full ${
+                          i < passphraseStrength.score ? passphraseStrengthBarColor(passphraseStrength.score) : "bg-slate-200 dark:bg-slate-700"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <p className={`mt-1 text-xs font-medium ${passphraseStrengthTextColor(passphraseStrength.score)}`}>
+                    {passphraseStrength.label}
+                  </p>
+                </div>
+              )}
             </label>
             <label className="block">
               <span className="mb-1 block text-sm font-semibold text-slate-700">Confirm New Passphrase</span>
@@ -328,7 +352,7 @@ export default function Settings({
           {passphraseStatus && (
             <p
               className={`mt-3 text-sm font-medium ${
-                passphraseStatus.kind === "ok" ? "text-emerald-700" : "text-red-600"
+                passphraseStatus.kind === "ok" ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
               }`}
             >
               {passphraseStatus.text}
@@ -358,6 +382,25 @@ export default function Settings({
                 {option}
               </button>
             ))}
+          </div>
+
+          <div className="mt-6 border-t border-slate-200 pt-4">
+            <span className="mb-2 block text-sm font-semibold text-slate-700">Trash Auto-Expiry</span>
+            <p className="mb-2 text-xs text-slate-500">
+              Items in Trash older than this are purged automatically, in addition to Empty Trash.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              {TRASH_RETENTION_OPTIONS.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => onChangeTrashRetentionOption(option)}
+                  className={`neo-btn py-3 ${trashRetentionOption === option ? "bg-blue-600 text-white" : "bg-paper"}`}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="mt-6 border-t border-slate-200 pt-4">
@@ -454,7 +497,7 @@ export default function Settings({
               )}
 
               {locationStatus && (
-                <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm font-medium text-amber-800">
+                <p className="mt-3 rounded-xl border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/40 px-3 py-3 text-sm font-medium text-amber-800 dark:text-amber-300">
                   {locationStatus}
                 </p>
               )}

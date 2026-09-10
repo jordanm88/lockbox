@@ -82,7 +82,7 @@ export default function UploadPreviewPanel({
         <div className="mt-4 max-h-72 overflow-auto rounded-xl border border-slate-100 bg-slate-50 p-3 font-mono text-xs text-slate-600">
           {shownLines.map((line) => (
             <div key={line.key} style={{ paddingLeft: `${line.depth * 1.1}rem` }}>
-              <span className={line.isDir ? "font-semibold text-blue-700" : "text-slate-600"}>
+              <span className={line.isDir ? "font-semibold text-blue-700 dark:text-blue-400" : "text-slate-600"}>
                 {line.isDir ? "📁 " : "📄 "}
                 {line.label}
                 {line.isDir ? "/" : ""}

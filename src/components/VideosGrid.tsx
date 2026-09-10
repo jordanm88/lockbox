@@ -86,29 +86,29 @@ export default function VideosGrid({
       </div>
 
       {selectedPaths.size > 0 && (
-        <div className="flex flex-wrap items-center gap-3 border-b border-blue-100 bg-blue-50 px-5 py-3">
-          <p className="text-sm font-semibold text-blue-800">
+        <div className="flex flex-wrap items-center gap-3 border-b border-blue-100 dark:border-blue-800/60 bg-blue-50 dark:bg-blue-950/40 px-5 py-3">
+          <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">
             {selectedPaths.size} item{selectedPaths.size === 1 ? "" : "s"} selected
           </p>
           <div className="ml-auto flex flex-wrap gap-2">
             <button
               type="button"
               onClick={onBulkExport}
-              className="rounded-full bg-white px-3.5 py-1.5 text-sm font-medium text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-50"
+              className="rounded-full bg-white px-3.5 py-1.5 text-sm font-medium text-emerald-700 dark:text-emerald-400 ring-1 ring-emerald-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
             >
               ⬇ Export selected
             </button>
             <button
               type="button"
               onClick={onBulkDelete}
-              className="rounded-full bg-white px-3.5 py-1.5 text-sm font-medium text-rose-600 ring-1 ring-rose-200 hover:bg-rose-50"
+              className="rounded-full bg-white px-3.5 py-1.5 text-sm font-medium text-rose-600 dark:text-rose-400 ring-1 ring-rose-200 hover:bg-rose-50 dark:hover:bg-rose-950/40"
             >
               🗑 Delete selected
             </button>
             <button
               type="button"
               onClick={() => onSetSelection([])}
-              className="rounded-full px-3.5 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100"
+              className="rounded-full px-3.5 py-1.5 text-sm font-medium text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40"
             >
               Clear
             </button>
@@ -160,14 +160,14 @@ export default function VideosGrid({
                       <button
                         type="button"
                         onClick={() => onExport(entry)}
-                        className="rounded-full px-2.5 py-1 text-xs font-medium text-emerald-600 hover:bg-emerald-50"
+                        className="rounded-full px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
                       >
                         Export
                       </button>
                       <button
                         type="button"
                         onClick={() => onDelete(entry)}
-                        className="rounded-full px-2.5 py-1 text-xs font-medium text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                        className="rounded-full px-2.5 py-1 text-xs font-medium text-slate-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400"
                       >
                         Delete
                       </button>

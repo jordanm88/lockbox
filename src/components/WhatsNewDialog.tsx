@@ -15,7 +15,7 @@ export default function WhatsNewDialog({ release, onDismiss }: WhatsNewDialogPro
       <div className="neo-panel flex max-h-[80vh] w-full max-w-lg flex-col bg-white p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">What's new</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">What's new</p>
             <h3 className="mt-1 text-xl font-semibold text-ink">{release.name || `Lockbox v${release.version}`}</h3>
           </div>
           <button

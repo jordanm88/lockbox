@@ -1268,6 +1268,56 @@ pub fn empty_trash(state: State<AppState>) -> Result<(), String> {
     save_index(&vault_dir, key, &index)
 }
 
+/// Permanently purges every trash item whose `deleted_at` is older than
+/// `max_age_seconds` — the backend half of Settings' auto-expiry option.
+/// The retention period is chosen in the frontend (`src/types.ts`'s
+/// `TRASH_RETENTION_DAYS`) and this is called once per unlock rather than
+/// run on a background timer; returns how many top-level trash items (not
+/// raw descendant entries) were purged, for the caller's notice text.
+#[tauri::command(async)]
+pub fn purge_expired_trash(state: State<AppState>, max_age_seconds: u64) -> Result<usize, String> {
+    let guard = lock_recover(&state.vault_key);
+    let key = guard.as_ref().ok_or("vault is locked")?;
+
+    let vault_dir = usb_root::vault_dir(&state.root);
+    let mut index = load_or_upgrade_index(&vault_dir, key)?;
+    let data_dir = ensure_data_dir(&vault_dir)?;
+
+    let now = now_unix_seconds();
+    let expired_roots: Vec<String> = index
+        .trash
+        .iter()
+        .filter(|entry| is_trash_root(&index, entry))
+        .filter(|entry| now.saturating_sub(entry.deleted_at.unwrap_or(now)) >= max_age_seconds)
+        .map(|entry| entry.original_path.clone())
+        .collect();
+
+    if expired_roots.is_empty() {
+        return Ok(0);
+    }
+
+    let mut to_remove = Vec::new();
+    for (i, entry) in index.trash.iter().enumerate() {
+        if expired_roots
+            .iter()
+            .any(|root| entry.original_path == *root || entry.original_path.starts_with(&format!("{root}/")))
+        {
+            to_remove.push(i);
+        }
+    }
+
+    to_remove.sort_unstable_by(|a, b| b.cmp(a));
+    for idx in to_remove {
+        let entry = index.trash.remove(idx);
+        if let Some(blob) = &entry.blob_name {
+            let _ = fs::remove_file(data_dir.join(blob));
+        }
+    }
+
+    save_index(&vault_dir, key, &index)?;
+    Ok(expired_roots.len())
+}
+
 /// `destination` comes from a native OS save-file dialog the user picked
 /// interactively — unlike every other path in this file, it's intentionally
 /// NOT sandboxed to the vault via `normalize_relative_path`/`safe_join`,

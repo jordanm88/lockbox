@@ -157,6 +157,40 @@ export default function Vault({ uploading, onStartUpload }: VaultProps) {
     };
   }, []);
 
+  // Delete key deletes the current selection, Escape clears the selection
+  // or closes an open preview — skipped while a dialog is already open or
+  // while typing in a text field (e.g. the search box), so the shortcuts
+  // never fight with normal typing or double up on confirmation dialogs.
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      const isTyping =
+        target instanceof HTMLElement &&
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+      if (isTyping) return;
+      if (createOpen || confirmOpen || bulkDeleteConfirmOpen) return;
+
+      if (event.key === "Delete" || event.key === "Backspace") {
+        if (selectedPaths.size > 0) {
+          event.preventDefault();
+          requestBulkDelete();
+        }
+        return;
+      }
+
+      if (event.key === "Escape") {
+        if (preview) {
+          closePreview();
+        } else if (selectedPaths.size > 0) {
+          setSelectedPaths(new Set());
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedPaths, preview, createOpen, confirmOpen, bulkDeleteConfirmOpen]);
+
   function filesFromFileList(fileList: FileList | null): FileWithPath[] {
     if (!fileList || fileList.length === 0) return [];
     return Array.from(fileList).map((file) => ({
@@ -560,10 +594,10 @@ export default function Vault({ uploading, onStartUpload }: VaultProps) {
       </div>
 
       {error && (
-        <p className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{error}</p>
+        <p className="mb-5 rounded-xl border border-red-200 dark:border-red-800/60 bg-red-50 dark:bg-red-950/40 px-4 py-3 text-sm font-medium text-red-700 dark:text-red-400">{error}</p>
       )}
       {notice && (
-        <p className="mb-5 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-700">{notice}</p>
+        <p className="mb-5 rounded-xl border border-blue-100 dark:border-blue-800/60 bg-blue-50 dark:bg-blue-950/40 px-4 py-3 text-sm font-medium text-blue-700 dark:text-blue-400">{notice}</p>
       )}
 
       <p className="mb-3 text-sm font-medium text-slate-500">
@@ -572,7 +606,7 @@ export default function Vault({ uploading, onStartUpload }: VaultProps) {
 
       {files.length === 0 && !loading ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
-          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-3xl">📥</div>
+          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-3xl">📥</div>
           <p className="font-semibold text-ink">Your vault is empty</p>
           <p className="mt-1 text-sm text-slate-500">Drag files or folders anywhere on this page, or use the "+ New" button above.</p>
         </div>

@@ -36,6 +36,34 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .setup(|_app| {
+            // Windows and macOS pick up the bundle icon (icon.ico /
+            // icon.icns) automatically for the running window. Linux
+            // normally would too, but only via desktop-file integration
+            // (the window manager looks up a .desktop file matching the
+            // window's WM_CLASS to find an icon) — an AppImage run directly
+            // has no such .desktop file registered anywhere, so without
+            // this the taskbar/window-switcher icon falls back to a
+            // generic one even though the app itself is running fine.
+            // Setting it directly on the window sidesteps that entirely,
+            // regardless of whether the AppImage is "integrated" with the
+            // desktop or just run in place.
+            #[cfg(target_os = "linux")]
+            {
+                use tauri::Manager;
+                if let Some(window) = _app.get_webview_window("main") {
+                    match tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png")) {
+                        Ok(icon) => {
+                            if let Err(e) = window.set_icon(icon) {
+                                eprintln!("warning: failed to set window icon: {e}");
+                            }
+                        }
+                        Err(e) => eprintln!("warning: failed to decode bundled window icon: {e}"),
+                    }
+                }
+            }
+            Ok(())
+        })
         .manage(AppState {
             root,
             _instance_lock: instance_lock,
@@ -44,6 +72,7 @@ pub fn run() {
             sync_in_progress: Mutex::new(false),
             uploads: Mutex::new(HashMap::new()),
             downloads: Mutex::new(HashMap::new()),
+            third_party_scan_cache: Mutex::new(HashMap::new()),
         })
         .invoke_handler(tauri::generate_handler![
             commands::unlock_vault,

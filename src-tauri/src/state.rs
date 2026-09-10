@@ -2,6 +2,7 @@ use crate::crypto::VaultKey;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
+use std::time::SystemTime;
 
 pub struct AppState {
     pub root: PathBuf,
@@ -24,6 +25,11 @@ pub struct AppState {
     /// Decrypted file contents staged for chunked download, keyed by a
     /// random session id, freed once the frontend calls `end_download`.
     pub downloads: Mutex<HashMap<String, Vec<u8>>>,
+    /// Per-folder cache for `store_commands::scan_third_party_apps`, keyed
+    /// by folder name under `Third Party Apps/`: that folder's own mtime as
+    /// of the last scan, paired with the launcher path resolved then. See
+    /// that function for why this exists and what it doesn't catch.
+    pub third_party_scan_cache: Mutex<HashMap<String, (SystemTime, Option<String>)>>,
 }
 
 /// Locks `mutex`, recovering from poisoning instead of propagating it.

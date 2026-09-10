@@ -254,12 +254,28 @@ pub struct ThirdPartyApp {
 /// inside it (a `.exe` on Windows; any regular file with the executable bit
 /// set on Linux, since portable Linux binaries carry no fixed extension),
 /// since the main application binary is almost always the biggest file
-/// while uninstallers/updaters/crash-handlers are small. Re-run on every
-/// call rather than cached, so dropping in a new folder shows up on the
-/// App Store's next periodic refresh without restarting Lockbox. Runs
-/// automatically every 20s from the frontend, so it must never block the
-/// main thread — see the comment on `install_app` above for why `async` is
-/// needed here even though the function body itself doesn't await anything.
+/// while uninstallers/updaters/crash-handlers are small.
+///
+/// Runs automatically every 20s from the frontend (see `ThirdPartyApps.tsx`)
+/// — re-walking every file in every already-known folder on every single
+/// call, which is what this used to do unconditionally, got slower the more
+/// (and the bigger) apps were sitting there, for no benefit most of the
+/// time: nothing about a folder's contents usually changed between one poll
+/// and the next. `AppState.third_party_scan_cache` remembers each folder's
+/// own mtime alongside its last-resolved launcher; a folder is only
+/// re-walked when its mtime has moved since the last scan. Adding, removing,
+/// or renaming a file inside a folder updates that folder's own mtime,
+/// which covers the ordinary case (dropping in a new portable app) — the
+/// one thing it doesn't catch is changing an existing file's permission
+/// bits in place (e.g. `chmod +x` on a file that was already there) without
+/// adding, removing, or renaming anything else, since that only touches the
+/// file's own metadata, not its parent directory's. A brand new folder has
+/// no cache entry at all, so it's always scanned fresh the first time it's
+/// seen — dropping in a new folder still shows up on the very next poll.
+///
+/// Must never block the main thread — see the comment on `install_app`
+/// above for why `async` is needed here even though the function body
+/// doesn't await anything.
 #[tauri::command(async)]
 pub fn scan_third_party_apps(state: State<AppState>) -> Result<Vec<ThirdPartyApp>, String> {
     let root = usb_root::third_party_apps_dir(&state.root);
@@ -270,7 +286,10 @@ pub fn scan_third_party_apps(state: State<AppState>) -> Result<Vec<ThirdPartyApp
         Err(e) => return Err(format!("failed to scan Third Party Apps: {e}")),
     };
 
+    let mut cache = lock_recover(&state.third_party_scan_cache);
+    let mut seen_names = std::collections::HashSet::new();
     let mut apps = Vec::new();
+
     for entry in entries {
         let entry = entry.map_err(|e| format!("failed to read Third Party Apps entry: {e}"))?;
         let path = entry.path();
@@ -278,30 +297,23 @@ pub fn scan_third_party_apps(state: State<AppState>) -> Result<Vec<ThirdPartyApp
             continue;
         }
         let name = entry.file_name().to_string_lossy().to_string();
+        seen_names.insert(name.clone());
 
-        let mut candidates = Vec::new();
-        find_launcher_candidates(&path, &mut candidates)?;
-        candidates.retain(|candidate| {
-            let lower = candidate
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or_default()
-                .to_ascii_lowercase();
-            !IGNORED_LAUNCHER_PATTERNS
-                .iter()
-                .any(|pattern| lower.contains(pattern))
-        });
-        candidates.sort_by_key(|candidate| {
-            std::cmp::Reverse(std::fs::metadata(candidate).map(|m| m.len()).unwrap_or(0))
-        });
+        let mtime = entry.metadata().and_then(|m| m.modified()).ok();
+        let cached = cache.get(&name).cloned();
 
-        let launcher_path = candidates.first().map(|candidate| {
-            candidate
-                .strip_prefix(&root)
-                .unwrap_or(candidate)
-                .to_string_lossy()
-                .replace('\\', "/")
-        });
+        let launcher_path = match (mtime, &cached) {
+            (Some(mtime), Some((cached_mtime, cached_launcher))) if mtime == *cached_mtime => {
+                cached_launcher.clone()
+            }
+            _ => {
+                let resolved = resolve_third_party_launcher(&root, &path)?;
+                if let Some(mtime) = mtime {
+                    cache.insert(name.clone(), (mtime, resolved.clone()));
+                }
+                resolved
+            }
+        };
 
         apps.push(ThirdPartyApp {
             id: name.clone(),
@@ -310,8 +322,43 @@ pub fn scan_third_party_apps(state: State<AppState>) -> Result<Vec<ThirdPartyApp
         });
     }
 
+    // Drop cache entries for folders that no longer exist, so the cache
+    // doesn't grow without bound across a long-running session as folders
+    // come and go.
+    cache.retain(|name, _| seen_names.contains(name));
+    drop(cache);
+
     apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     Ok(apps)
+}
+
+/// The actual (expensive) per-folder work `scan_third_party_apps` caches
+/// the result of: walk `path` recursively, filter out known helper/updater
+/// binaries, and pick the largest remaining executable as the launcher.
+fn resolve_third_party_launcher(root: &Path, path: &Path) -> Result<Option<String>, String> {
+    let mut candidates = Vec::new();
+    find_launcher_candidates(path, &mut candidates)?;
+    candidates.retain(|candidate| {
+        let lower = candidate
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        !IGNORED_LAUNCHER_PATTERNS
+            .iter()
+            .any(|pattern| lower.contains(pattern))
+    });
+    candidates.sort_by_key(|candidate| {
+        std::cmp::Reverse(std::fs::metadata(candidate).map(|m| m.len()).unwrap_or(0))
+    });
+
+    Ok(candidates.first().map(|candidate| {
+        candidate
+            .strip_prefix(root)
+            .unwrap_or(candidate)
+            .to_string_lossy()
+            .replace('\\', "/")
+    }))
 }
 
 fn find_launcher_candidates(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {

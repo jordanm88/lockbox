@@ -328,7 +328,16 @@ export default function Vault({ uploading, onStartUpload }: VaultProps) {
 
     setError(null);
     setNotice(null);
-    setPendingUpload(files);
+
+    // Unlike the "+ New" button (which routes through handleFilesChosen),
+    // a drop lands here directly — without this, dragging an arbitrary file
+    // onto the page while viewing Pictures/Videos silently uploaded it
+    // anyway, bypassing the same "photos/videos only" rule the picker's
+    // accept filter and handleFilesChosen already enforce.
+    const filtered = filterEntriesForSection(files);
+    if (filtered === null) return;
+
+    setPendingUpload(filtered);
     setPendingFolders(folders);
   }
 

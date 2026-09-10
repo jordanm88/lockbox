@@ -14,10 +14,12 @@ mod store_commands;
 mod usb_root;
 mod updates;
 
-use state::AppState;
+use state::{lock_recover, AppState};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Mutex;
+use std::time::Duration;
+use tauri::{Emitter, Manager};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -50,7 +52,6 @@ pub fn run() {
             // desktop or just run in place.
             #[cfg(target_os = "linux")]
             {
-                use tauri::Manager;
                 if let Some(window) = _app.get_webview_window("main") {
                     match tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png")) {
                         Ok(icon) => {
@@ -62,6 +63,19 @@ pub fn run() {
                     }
                 }
             }
+
+            // A pulled USB drive doesn't fail loudly — the next read/write
+            // against it just starts erroring, which otherwise means the
+            // vault key sits in memory, decryptable, for however long it
+            // takes the user to notice something's wrong and lock it
+            // themselves. This instead notices within a couple of seconds
+            // and clears it immediately, unprompted — the whole point of a
+            // portable vault is that the drive leaves with you, so "it's
+            // gone" has to be treated as at least as security-relevant as
+            // "you walked away" (the existing inactivity auto-lock).
+            let watcher_handle = _app.handle().clone();
+            std::thread::spawn(move || watch_for_drive_removal(watcher_handle));
+
             Ok(())
         })
         .manage(AppState {
@@ -116,6 +130,63 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| fatal_startup_error(&format!("Tauri failed to start: {e}")));
+}
+
+/// Runs for the app's whole lifetime on a background thread — spawned once
+/// from `run()`'s `.setup()` — checking every couple of seconds whether
+/// `AppState.root` (the vault's drive or folder) is still reachable. If the
+/// vault is unlocked and it isn't, the key is cleared from memory right
+/// away and the frontend is told via a `vault-force-locked` event, so the
+/// UI drops back to the lock screen instead of sitting on a vault that's
+/// unlocked in memory but whose drive is gone.
+///
+/// A plain polling loop, not an OS-level device-removal notification
+/// (`WM_DEVICECHANGE` on Windows, udev/udisks2 signals on Linux) — those
+/// would notice slightly faster, but need real per-platform event-loop
+/// integration for what a 2-second poll already answers closely enough:
+/// this only has to be fast relative to "how long is the vault key
+/// meaningfully exposed after the drive leaves," not instantaneous.
+///
+/// Requires `FAILURES_BEFORE_LOCK` *consecutive* failed checks, not just
+/// one, before actually locking: USB_ROOT is explicitly also supported
+/// pointed at a cloud-sync folder (Dropbox/OneDrive/etc. — see
+/// `usb_root::acquire_instance_lock`'s doc comment), and those can go
+/// briefly unavailable on their own (not fully "hydrated" yet, a momentary
+/// sync-client hiccup) without the folder actually having gone anywhere.
+/// One bad check is far more likely to be that than an actual drive pull;
+/// two in a row, a few seconds apart, is a much safer signal either way.
+fn watch_for_drive_removal(app_handle: tauri::AppHandle) {
+    const CHECK_INTERVAL: Duration = Duration::from_secs(2);
+    const FAILURES_BEFORE_LOCK: u32 = 2;
+
+    let mut consecutive_failures = 0u32;
+
+    loop {
+        std::thread::sleep(CHECK_INTERVAL);
+
+        let state = app_handle.state::<AppState>();
+        if lock_recover(&state.vault_key).is_none() {
+            consecutive_failures = 0; // locked already — nothing to protect, nothing to debounce
+            continue;
+        }
+
+        if std::fs::metadata(&state.root).is_ok() {
+            consecutive_failures = 0;
+            continue;
+        }
+
+        consecutive_failures += 1;
+        if consecutive_failures < FAILURES_BEFORE_LOCK {
+            continue;
+        }
+        consecutive_failures = 0;
+
+        *lock_recover(&state.vault_key) = None;
+        let _ = app_handle.emit(
+            "vault-force-locked",
+            "Locked automatically: the vault's drive is no longer connected.",
+        );
+    }
 }
 
 /// WebKitGTK disagreeing with the graphics driver is a widely reported

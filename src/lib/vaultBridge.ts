@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 
 export interface VaultFileEntry {
@@ -17,6 +18,15 @@ export function vaultExists(): Promise<boolean> {
 
 export function lockVault(): Promise<void> {
   return invoke<void>("lock_vault");
+}
+
+// Fired by the backend's drive-removal watcher (see lib.rs) the moment it
+// notices the vault's root is no longer reachable while unlocked — the
+// vault key is already cleared from memory by the time this arrives, so the
+// handler here only needs to update the UI to match, not lock anything
+// itself.
+export function onVaultForceLocked(handler: (reason: string) => void): Promise<UnlistenFn> {
+  return listen<string>("vault-force-locked", (event) => handler(event.payload));
 }
 
 // Re-encrypts every blob and the index under a new passphrase — see

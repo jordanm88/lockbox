@@ -13,9 +13,11 @@ const MIN_PASSPHRASE_LENGTH = 12;
 
 interface LockScreenProps {
   onUnlock: (passphrase: string) => Promise<boolean>;
+  /** Shown once, e.g. "Locked automatically because the vault drive was removed." */
+  notice?: string | null;
 }
 
-export default function LockScreen({ onUnlock }: LockScreenProps) {
+export default function LockScreen({ onUnlock, notice }: LockScreenProps) {
   const [passphrase, setPassphrase] = useState("");
   const [confirmPassphrase, setConfirmPassphrase] = useState("");
   const [showPassphrase, setShowPassphrase] = useState(false);
@@ -100,6 +102,12 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
           <p className="mt-2 text-sm font-semibold text-slate-700">{title}</p>
           <p className="mt-2 text-sm text-slate-600">{subtitle}</p>
         </div>
+
+        {notice && (
+          <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm font-semibold text-amber-800">
+            {notice}
+          </p>
+        )}
 
         {isLoading ? (
           <div className="neo-card px-4 py-5 text-center font-semibold text-ink">

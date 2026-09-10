@@ -10,7 +10,7 @@ import ConfirmDialog from "./components/ConfirmDialog";
 import UploadToast from "./components/UploadToast";
 import CloudSyncToast from "./components/CloudSyncToast";
 import WhatsNewDialog from "./components/WhatsNewDialog";
-import { lockVault, unlockVault } from "./lib/vaultBridge";
+import { lockVault, onVaultForceLocked, unlockVault } from "./lib/vaultBridge";
 import {
   CloudAction,
   CloudRemoteConfig,
@@ -77,6 +77,7 @@ function readStoredAutoLockOption(): AutoLockOption {
 
 export default function App() {
   const [unlocked, setUnlocked] = useState(false);
+  const [lockNotice, setLockNotice] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>("vault");
 
   const [autoSyncEnabled, setAutoSyncEnabledState] = useState(() => readStoredBoolean("autoSyncEnabled"));
@@ -224,7 +225,10 @@ export default function App() {
 
   async function handleUnlock(passphrase: string): Promise<boolean> {
     const ok = await unlockVault(passphrase);
-    if (ok) setUnlocked(true);
+    if (ok) {
+      setUnlocked(true);
+      setLockNotice(null);
+    }
     return ok;
   }
 
@@ -292,12 +296,21 @@ export default function App() {
     const restoreFinishedUnlisten = onRestoreFinished((result) => {
       setCloudRestoreStatus(result.success ? "success" : "failed");
     });
+    // The backend's drive-removal watcher already clears the vault key in
+    // memory by the time this fires (see lib.rs) — this just brings the UI
+    // in line with that and explains why, instead of the vault silently
+    // becoming unusable with no indication anything happened.
+    const forceLockedUnlisten = onVaultForceLocked((reason) => {
+      setLockNotice(reason);
+      setUnlocked(false);
+    });
 
     return () => {
       outputUnlisten.then((unlisten) => unlisten());
       syncFinishedUnlisten.then((unlisten) => unlisten());
       testFinishedUnlisten.then((unlisten) => unlisten());
       restoreFinishedUnlisten.then((unlisten) => unlisten());
+      forceLockedUnlisten.then((unlisten) => unlisten());
     };
   }, []);
 
@@ -509,7 +522,7 @@ export default function App() {
   }
 
   if (!unlocked) {
-    return <LockScreen onUnlock={handleUnlock} />;
+    return <LockScreen onUnlock={handleUnlock} notice={lockNotice} />;
   }
 
   return (

@@ -1,15 +1,12 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { ReleaseNotes } from "../lib/updateBridge";
+import { renderReleaseNotes } from "../lib/releaseNotesMarkdown";
 
 interface WhatsNewDialogProps {
   release: ReleaseNotes | null;
   onDismiss: () => void;
 }
 
-// A GitHub release body is plain markdown (mostly "- " bullet lines and "##"
-// headers); rendering it as preformatted text rather than pulling in a
-// markdown parser keeps this simple while staying perfectly readable —
-// release notes are short, structured lists, not richly formatted prose.
 export default function WhatsNewDialog({ release, onDismiss }: WhatsNewDialogProps) {
   if (!release) return null;
 
@@ -33,7 +30,7 @@ export default function WhatsNewDialog({ release, onDismiss }: WhatsNewDialogPro
 
         <div className="mt-4 min-h-0 flex-1 overflow-y-auto rounded-xl border border-slate-100 bg-slate-50 p-4">
           {release.body ? (
-            <pre className="whitespace-pre-wrap break-words font-sans text-sm text-slate-700">{release.body}</pre>
+            renderReleaseNotes(release.body)
           ) : (
             <p className="text-sm text-slate-500">No release notes were provided for this version.</p>
           )}

@@ -183,9 +183,12 @@ fn parse_version_parts(version: &str) -> Vec<u64> {
 }
 
 /// Finds the release asset this build's self-updater knows how to apply:
-/// the raw portable `.exe` on Windows, the `.deb` on Linux. Shared scoring
-/// shape between both platforms — favor an asset name that names the OS,
-/// then a bare "lockbox" name, then any name that merely mentions lockbox.
+/// the raw portable `.exe` on Windows, the `.deb` *or* the `.AppImage` on
+/// Linux — whichever matches how *this particular running copy* was
+/// distributed, since both are built and released and the same compiled
+/// binary can end up in either package. Shared scoring shape across all
+/// three — favor an asset name that names the OS, then a bare "lockbox"
+/// name, then any name that merely mentions lockbox.
 #[cfg(windows)]
 fn find_platform_asset(release: &Value) -> (Option<String>, Option<String>) {
     find_best_asset(
@@ -197,16 +200,32 @@ fn find_platform_asset(release: &Value) -> (Option<String>, Option<String>) {
     )
 }
 
-/// No CI-produced `.deb` name reliably contains "lockbox-linux" the way the
-/// Windows build's does — Tauri's bundler names it from the package
-/// version/arch instead (e.g. `lockbox_0.2.16_amd64.deb`) — so the
-/// meaningful disambiguator here is architecture, in case a future release
-/// ever publishes more than one. The exact-match tier is unused (no bare
-/// canonical Linux filename to prefer), so it's given a pattern that can
-/// never match.
+/// `$APPIMAGE` is set by every AppImage runtime for the process it launches
+/// (regardless of FUSE-mounted vs. `--appimage-extract-and-run`), and only
+/// by it — a `.deb`-installed Lockbox never has this set. Same signal
+/// `usb_root::candidate_root` uses to find the vault on a portable AppImage
+/// copy; here it's what decides which update mechanism even applies, since
+/// a `.deb` update prompts a system package install while an AppImage
+/// update swaps a file in place — offering the wrong one for how this copy
+/// is actually running would be actively harmful, not just cosmetically off.
+#[cfg(target_os = "linux")]
+fn running_as_appimage() -> bool {
+    std::env::var_os("APPIMAGE").is_some()
+}
+
+/// No CI-produced `.deb`/`.AppImage` name reliably contains an
+/// OS-and-format-specific string the way the Windows build's does — Tauri's
+/// bundler names them from the package version/arch instead (e.g.
+/// `lockbox_0.2.16_amd64.deb`) — so the meaningful disambiguator here is
+/// architecture, in case a future release ever publishes more than one. The
+/// exact-match tier is unused (no bare canonical filename to prefer for
+/// either format), so it's given a pattern that can never match; the
+/// generic "just contains lockbox" fallback in `find_best_asset` is what
+/// actually matches in practice, same as it already does for `.deb`.
 #[cfg(target_os = "linux")]
 fn find_platform_asset(release: &Value) -> (Option<String>, Option<String>) {
-    find_best_asset(release, ".deb", &[], ("amd64", 100), ("", 0))
+    let extension = if running_as_appimage() { ".appimage" } else { ".deb" };
+    find_best_asset(release, extension, &[], ("amd64", 100), ("", 0))
 }
 
 /// Shared scoring logic behind `find_platform_asset`: every asset must end
@@ -314,14 +333,15 @@ fn download_update_bytes(download_url: &str) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-/// Downloads the update and swaps it into place: on Windows this stages the
-/// new exe and hands off to a detached `.bat` helper that waits for this
-/// process to exit before moving it over the running one (Windows won't let
-/// a running exe's own file be replaced while it's open, unlike Linux). On
-/// Linux there's no such in-place swap available for a `.deb`-installed,
-/// dpkg-owned binary — instead the downloaded `.deb` is handed to the
-/// desktop's own package-install UI (`apply_linux_update`), which does its
-/// own privilege elevation; Lockbox never runs anything as root itself.
+/// Downloads the update and applies it however this specific running copy
+/// needs: on Windows, stages the new exe and hands off to a detached `.bat`
+/// helper that waits for this process to exit before moving it over the
+/// running one (Windows won't let a running exe's own file be replaced
+/// while it's open, unlike Linux). On Linux, dispatches at runtime (not
+/// compile time — the same compiled binary ships as both a `.deb` and an
+/// `.AppImage`, so this can't be a `#[cfg]` split) between a portable
+/// in-place AppImage swap and handing a `.deb` to the system package
+/// installer — see `apply_linux_appimage_update` and `apply_linux_deb_update`.
 #[cfg(windows)]
 fn apply_platform_update(app_handle: &AppHandle, download_url: &str) -> Result<String, String> {
     let bytes = download_update_bytes(download_url)?;
@@ -360,10 +380,102 @@ fn apply_platform_update(app_handle: &AppHandle, download_url: &str) -> Result<S
 
 #[cfg(target_os = "linux")]
 fn apply_platform_update(app_handle: &AppHandle, download_url: &str) -> Result<String, String> {
+    if running_as_appimage() {
+        apply_linux_appimage_update(app_handle, download_url)
+    } else {
+        apply_linux_deb_update(app_handle, download_url)
+    }
+}
+
+/// Portable in-place swap, matching how the Windows portable exe updates
+/// itself — appropriate here because an AppImage *is* the portable form on
+/// Linux, the same single-file, run-from-anywhere (including a USB drive)
+/// model.
+///
+/// The key difference from Windows: no detached helper script waiting for
+/// this process to exit is needed at all. Windows refuses to let a running
+/// exe's backing file be replaced while it's open; Linux doesn't have that
+/// restriction — replacing the file at this path just creates a new inode
+/// there, while this already-running process keeps using the old one via
+/// its existing open handle until it exits. The next launch picks up the
+/// new file.
+///
+/// Writing to `$APPIMAGE` — not `current_exe()` — is the part that actually
+/// matters: `current_exe()` resolves *inside* wherever this AppImage's
+/// contents got FUSE-mounted or extracted to (a location that has nothing
+/// to do with wherever the real `.AppImage` file sits, e.g. a USB drive),
+/// exactly the same distinction `usb_root::candidate_root` has to make for
+/// the vault root. Writing the update there instead of to `$APPIMAGE` would
+/// silently vanish it — overwriting a throwaway mount/extraction directory
+/// instead of the file the user actually launched and will launch again
+/// next time.
+#[cfg(target_os = "linux")]
+fn apply_linux_appimage_update(app_handle: &AppHandle, download_url: &str) -> Result<String, String> {
     let bytes = download_update_bytes(download_url)?;
 
-    // A `.deb` is a Unix `ar` archive; this is that format's magic header,
-    // the Linux equivalent of checking for the Windows PE `MZ` header above.
+    // Every AppImage is itself a self-contained ELF executable (with a
+    // squashfs appended); this is that format's magic header, the Linux
+    // equivalent of checking for the Windows PE `MZ` header above.
+    if bytes.len() < 4 || &bytes[..4] != b"\x7fELF" {
+        return Err("downloaded update is not an AppImage".to_string());
+    }
+
+    let appimage_path = std::env::var_os("APPIMAGE")
+        .map(std::path::PathBuf::from)
+        .ok_or("couldn't determine this AppImage's own location ($APPIMAGE isn't set)")?;
+    let parent = appimage_path
+        .parent()
+        .ok_or("AppImage path has no parent directory")?;
+
+    // Staged in the *same* directory so the final rename below is a same-
+    // filesystem move — atomic, and never leaves a half-written file at the
+    // real path if the download itself was fine but the write gets
+    // interrupted.
+    let temp_path = parent.join(".lockbox-update.AppImage.tmp");
+    fs::write(&temp_path, &bytes).map_err(|e| format!("failed to stage update: {e}"))?;
+
+    {
+        use std::os::unix::fs::PermissionsExt;
+        match fs::metadata(&temp_path) {
+            Ok(metadata) => {
+                let mut permissions = metadata.permissions();
+                permissions.set_mode(permissions.mode() | 0o111);
+                if let Err(e) = fs::set_permissions(&temp_path, permissions) {
+                    let _ = fs::remove_file(&temp_path);
+                    return Err(format!("failed to make the update executable: {e}"));
+                }
+            }
+            Err(e) => {
+                let _ = fs::remove_file(&temp_path);
+                return Err(format!("failed to stage update: {e}"));
+            }
+        }
+    }
+
+    if let Err(e) = fs::rename(&temp_path, &appimage_path) {
+        let _ = fs::remove_file(&temp_path);
+        return Err(format!("failed to replace {}: {e}", appimage_path.display()));
+    }
+
+    app_handle.exit(0);
+    Ok(
+        "Update installed. Lockbox will close now — launch it again to use the new version."
+            .to_string(),
+    )
+}
+
+/// `.deb`-installed Lockbox: unlike the AppImage case, there's no in-place
+/// swap available for a dpkg-owned binary at a fixed system path. Instead
+/// the downloaded `.deb` is handed to the desktop's own package-install UI
+/// (GNOME Software, KDE Discover, etc.), which does its own polkit/pkexec
+/// prompt — Lockbox never elevates privileges itself. Unlike the AppImage
+/// and Windows paths, this doesn't happen automatically: the user finishes
+/// the install in that window, then relaunches Lockbox.
+#[cfg(target_os = "linux")]
+fn apply_linux_deb_update(app_handle: &AppHandle, download_url: &str) -> Result<String, String> {
+    let bytes = download_update_bytes(download_url)?;
+
+    // A `.deb` is a Unix `ar` archive; this is that format's magic header.
     if bytes.len() < 8 || &bytes[..8] != b"!<arch>\n" {
         return Err("downloaded update is not a .deb package".to_string());
     }
@@ -371,12 +483,6 @@ fn apply_platform_update(app_handle: &AppHandle, download_url: &str) -> Result<S
     let temp_deb = std::env::temp_dir().join("lockbox-update.deb");
     fs::write(&temp_deb, &bytes).map_err(|e| format!("failed to stage update: {e}"))?;
 
-    // Hands the downloaded package to the desktop's default handler for
-    // `.deb` files (GNOME Software, KDE Discover, etc.), which does its own
-    // polkit/pkexec prompt to install it — Lockbox never elevates privileges
-    // itself. Unlike the Windows in-place swap, this doesn't happen
-    // automatically: the user finishes the install in that window, then
-    // relaunches Lockbox.
     tauri_plugin_opener::open_path(&temp_deb, None::<&str>)
         .map_err(|e| format!("failed to open the downloaded update: {e}"))?;
 

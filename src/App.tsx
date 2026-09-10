@@ -476,7 +476,9 @@ export default function App() {
         setManualCheckStatus(`Up to date (v${info.currentVersion})`);
       } else if (!info.assetDownloadUrl) {
         setManualCheckStatus(
-          `Update found (v${info.latestVersion}) but no Windows EXE asset was found in the latest release.`,
+          `Update found (v${info.latestVersion}) but no matching release asset for this platform ` +
+            "was found (the updater looks for the portable .exe on Windows, and the .deb or " +
+            ".AppImage matching how this copy is running on Linux).",
         );
       } else {
         setManualCheckStatus(`Update v${info.latestVersion} available.`);

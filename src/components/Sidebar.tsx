@@ -89,6 +89,7 @@ export default function Sidebar({ activeTab, onSelectTab, onLock }: SidebarProps
           <button
             type="button"
             onClick={onLock}
+            title="Shortcut: Ctrl+Shift+L"
             className="flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"
           >
             🔒 Lock Vault

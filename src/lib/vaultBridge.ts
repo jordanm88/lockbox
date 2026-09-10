@@ -29,6 +29,52 @@ export function onVaultForceLocked(handler: (reason: string) => void): Promise<U
   return listen<string>("vault-force-locked", (event) => handler(event.payload));
 }
 
+export interface VaultVerifyIssue {
+  path: string;
+  reason: string;
+}
+
+export interface VaultVerifyReport {
+  filesChecked: number;
+  broken: VaultVerifyIssue[];
+  orphanedBlobs: string[];
+}
+
+export function verifyVault(): Promise<VaultVerifyReport> {
+  return invoke<VaultVerifyReport>("verify_vault");
+}
+
+// Where a vault-root override (see setVaultRootOverride) currently points,
+// if one's set at all. `null` means "no override — using the default
+// location." Distinct from getVaultRoot, which reports where the vault
+// actually ended up *this session*.
+export function getVaultRootOverride(): Promise<string | null> {
+  return invoke<string | null>("get_vault_root_override");
+}
+
+/**
+ * Prompts with a native folder-picker, then saves the chosen folder as
+ * where Lockbox should look for its vault from the *next* launch on (not
+ * live — see change_passphrase's sibling doc comment in commands.rs for why
+ * changing the root isn't done mid-session). Returns the chosen path, or
+ * null if the user cancels the dialog without choosing one.
+ *
+ * Deliberately does not move any existing vault data to the new location —
+ * it only changes where Lockbox looks. Callers must make that clear before
+ * invoking this, since picking an empty folder here effectively points
+ * Lockbox at a brand new, empty vault next time.
+ */
+export async function setVaultRootOverride(): Promise<string | null> {
+  const picked = await open({ directory: true });
+  if (!picked || Array.isArray(picked)) return null;
+  await invoke<void>("set_vault_root_override", { newPath: picked });
+  return picked;
+}
+
+export function clearVaultRootOverride(): Promise<void> {
+  return invoke<void>("clear_vault_root_override");
+}
+
 // Re-encrypts every blob and the index under a new passphrase — see
 // change_passphrase in commands.rs for why this can't be a lightweight
 // operation. Rejects with a message if currentPassphrase is wrong, so the
@@ -142,8 +188,35 @@ export async function readAndDecryptFile(
   }
 }
 
+// Moves a file/folder to trash rather than deleting it outright — see
+// delete_vault_entry in commands.rs. Use restoreVaultEntry to undo, or
+// permanentlyDeleteTrashEntry/emptyTrash to actually free the space.
 export function deleteVaultEntry(relativePath: string): Promise<void> {
   return invoke<void>("delete_vault_entry", { relativePath });
+}
+
+export interface TrashEntry {
+  path: string;
+  size: number;
+  isDir: boolean;
+  /** Unix seconds. */
+  deletedAt: number;
+}
+
+export function listTrash(): Promise<TrashEntry[]> {
+  return invoke<TrashEntry[]>("list_trash");
+}
+
+export function restoreVaultEntry(relativePath: string): Promise<void> {
+  return invoke<void>("restore_vault_entry", { relativePath });
+}
+
+export function permanentlyDeleteTrashEntry(relativePath: string): Promise<void> {
+  return invoke<void>("permanently_delete_trash_entry", { relativePath });
+}
+
+export function emptyTrash(): Promise<void> {
+  return invoke<void>("empty_trash");
 }
 
 /**

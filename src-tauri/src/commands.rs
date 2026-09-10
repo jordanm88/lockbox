@@ -24,17 +24,51 @@ pub struct VaultFileEntry {
     is_dir: bool,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrashEntry {
+    path: String,
+    size: u64,
+    is_dir: bool,
+    deleted_at: u64,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
 struct VaultIndexEntry {
     original_path: String,
     blob_name: Option<String>,
     is_dir: bool,
     size: Option<u64>,
+    /// `Some(unix_seconds)` while sitting in `VaultIndex::trash`, `None`
+    /// everywhere else — see `delete_vault_entry`. `#[serde(default)]` so
+    /// entries written before trash existed (no field at all) deserialize
+    /// as "not deleted" rather than failing to parse.
+    #[serde(default)]
+    deleted_at: Option<u64>,
 }
 
 #[derive(Serialize, Deserialize)]
 struct VaultIndex {
     entries: Vec<VaultIndexEntry>,
+    /// Soft-deleted entries, moved here by `delete_vault_entry` instead of
+    /// being removed outright — their blobs stay on disk untouched.
+    /// Deliberately a separate list rather than filtering `entries` by
+    /// `deleted_at`: every other function in this file already only ever
+    /// looks at `entries`, so moving something out of that list is by
+    /// itself enough to make it vanish from listings, uniqueness checks,
+    /// and everywhere else — no other call site needed to change at all.
+    /// `#[serde(default)]` so an index written before trash existed (no
+    /// field at all) deserializes as "nothing in trash" instead of failing
+    /// to parse.
+    #[serde(default)]
+    trash: Vec<VaultIndexEntry>,
+}
+
+fn now_unix_seconds() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 const INDEX_RELATIVE_PATH: &str = ".lockbox/vault.index.enc";
@@ -231,6 +265,94 @@ pub fn vault_exists(state: State<AppState>) -> Result<bool, String> {
     Ok(meta_path.exists())
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VaultVerifyIssue {
+    path: String,
+    reason: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VaultVerifyReport {
+    files_checked: u64,
+    broken: Vec<VaultVerifyIssue>,
+    orphaned_blobs: Vec<String>,
+}
+
+/// Walks every file entry in the vault index, confirming its blob exists on
+/// disk and actually decrypts — catching bit rot, a partial write from an
+/// interrupted operation, or a blob deleted out from under the index by
+/// something other than Lockbox itself, none of which show up until you
+/// happen to open that exact file. Also flags blobs sitting in the data
+/// directory that no index entry references at all — a leftover with no
+/// automatic cleanup, though a harmless one (nothing reads it, it's just
+/// using space).
+///
+/// `async`: reads and decrypts every blob in the vault — real, scaling
+/// work for a large vault, same reasoning as `change_passphrase`.
+#[tauri::command(async)]
+pub fn verify_vault(state: State<AppState>) -> Result<VaultVerifyReport, String> {
+    let guard = lock_recover(&state.vault_key);
+    let key = guard.as_ref().ok_or("vault is locked")?;
+
+    let vault_dir = usb_root::vault_dir(&state.root);
+    let index = load_or_upgrade_index(&vault_dir, key)?;
+    let data_dir = data_dir(&vault_dir);
+
+    let mut referenced_blobs = std::collections::HashSet::new();
+    let mut broken = Vec::new();
+    let mut files_checked = 0u64;
+
+    // Trashed files are checked too (their blobs are still real, still
+    // meant to be readable if restored) and, just as importantly, counted
+    // as "referenced" below — otherwise every single deleted-but-not-yet-
+    // emptied file would incorrectly show up as an orphaned blob.
+    let live_and_trashed = index.entries.iter().chain(index.trash.iter());
+
+    for entry in live_and_trashed {
+        let Some(blob_name) = &entry.blob_name else { continue };
+        referenced_blobs.insert(blob_name.clone());
+        files_checked += 1;
+
+        let result = fs::read(data_dir.join(blob_name))
+            .map_err(|e| format!("blob missing or unreadable: {e}"))
+            .and_then(|sealed| {
+                crypto::decrypt_bytes(key, &sealed)
+                    .map_err(|_| "failed to decrypt (corrupt, or blob doesn't match this key)".to_string())
+            });
+
+        if let Err(reason) = result {
+            let path = if entry.deleted_at.is_some() {
+                format!("{} (in trash)", entry.original_path)
+            } else {
+                entry.original_path.clone()
+            };
+            broken.push(VaultVerifyIssue { path, reason });
+        }
+    }
+
+    let mut orphaned_blobs = Vec::new();
+    if let Ok(entries) = fs::read_dir(&data_dir) {
+        for entry in entries.flatten() {
+            if !entry.path().is_file() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            if !referenced_blobs.contains(&name) {
+                orphaned_blobs.push(name);
+            }
+        }
+    }
+    orphaned_blobs.sort();
+
+    Ok(VaultVerifyReport {
+        files_checked,
+        broken,
+        orphaned_blobs,
+    })
+}
+
 /// Surfaces where the vault actually lives. Mainly relevant on Linux, where
 /// (unlike the Windows portable exe) that folder isn't necessarily next to
 /// the running binary — see `usb_root::find_usb_root` — so Settings shows
@@ -238,6 +360,39 @@ pub fn vault_exists(state: State<AppState>) -> Result<bool, String> {
 #[tauri::command]
 pub fn get_vault_root(state: State<AppState>) -> Result<String, String> {
     Ok(state.root.to_string_lossy().to_string())
+}
+
+/// Whether a vault-root override (from `set_vault_root_override`) is
+/// currently configured, and what it's set to — for Settings to show what's
+/// active, distinct from `get_vault_root` above, which reports where the
+/// vault ended up *this session* (the override if one applied, or wherever
+/// default resolution landed otherwise).
+#[tauri::command]
+pub fn get_vault_root_override() -> Option<String> {
+    usb_root::vault_root_override().map(|p| p.to_string_lossy().to_string())
+}
+
+/// Points Lockbox at a different vault folder from the *next* launch on —
+/// deliberately not live. `AppState.root` (and the instance lock tied to
+/// it) are established once at startup and read by nearly every command in
+/// this crate; making that swappable mid-session would mean auditing every
+/// one of those call sites for "what if root changes out from under me
+/// mid-operation," a much larger and riskier change than this setting is
+/// worth. The frontend is responsible for making clear that choosing a
+/// folder here does *not* move the current vault's data there — it only
+/// changes where Lockbox looks next time, which may be an entirely empty
+/// folder if nothing's there yet.
+#[tauri::command]
+pub fn set_vault_root_override(new_path: String) -> Result<(), String> {
+    usb_root::set_vault_root_override(Path::new(&new_path)).map_err(|e| e.to_string())
+}
+
+/// Forgets the override, reverting to the default exe-relative resolution
+/// (and, on Linux, the remembered-or-picked fallback) from the next launch
+/// on — also not live, same reasoning as `set_vault_root_override`.
+#[tauri::command]
+pub fn clear_vault_root_override() -> Result<(), String> {
+    usb_root::clear_vault_root_override().map_err(|e| e.to_string())
 }
 
 /// Lets the frontend pick platform-specific copy (BitLocker/VeraCrypt vs.
@@ -274,13 +429,19 @@ pub struct StorageInfo {
 pub fn get_storage_info(state: State<AppState>) -> Result<StorageInfo, String> {
     let vault_dir = usb_root::vault_dir(&state.root);
 
-    let vault_used_bytes = lock_recover(&state.vault_key)
+    // Trash is included: a "deleted" blob still occupies real disk space
+    // until it's actually purged (see delete_vault_entry) — reporting usage
+    // as though it were already freed would make this meter quietly
+    // wrong (lower than the drive's *actual* free space) for as long as
+    // anything sits in trash.
+    let vault_used_bytes: u64 = lock_recover(&state.vault_key)
         .as_ref()
         .and_then(|key| load_index(&vault_dir, key).ok())
         .map(|index| {
             index
                 .entries
                 .iter()
+                .chain(index.trash.iter())
                 .filter(|entry| !entry.is_dir)
                 .filter_map(|entry| entry.size)
                 .sum()
@@ -323,6 +484,7 @@ fn save_encrypted_file(
         blob_name: Some(blob_name),
         is_dir: false,
         size: Some(file_len),
+        deleted_at: None,
     });
 
     save_index(vault_dir, key, &index)?;
@@ -461,6 +623,7 @@ fn ensure_parent_directories(index: &mut VaultIndex, path: &str) -> Result<(), S
                 blob_name: None,
                 is_dir: true,
                 size: None,
+                deleted_at: None,
             }),
         }
     }
@@ -631,6 +794,7 @@ fn migrate_plaintext_dir(
                     blob_name: None,
                     is_dir: true,
                     size: None,
+                    deleted_at: None,
                 });
             }
             migrate_plaintext_dir(base_dir, &path, key, index, data_dir)?;
@@ -650,6 +814,7 @@ fn migrate_plaintext_dir(
                 blob_name: Some(blob_name),
                 is_dir: false,
                 size: Some(metadata.len()),
+                deleted_at: None,
             });
         }
     }
@@ -685,7 +850,7 @@ fn remove_empty_plaintext_dirs(base_dir: &Path, dir: &Path) -> Result<(), String
 fn load_index(vault_dir: &Path, key: &crypto::VaultKey) -> Result<VaultIndex, String> {
     let path = index_path(vault_dir);
     if !path.exists() {
-        return Ok(VaultIndex { entries: Vec::new() });
+        return Ok(VaultIndex { entries: Vec::new(), trash: Vec::new() });
     }
 
     let sealed = fs::read(&path).map_err(|e| format!("failed to read vault index: {e}"))?;
@@ -882,6 +1047,7 @@ pub fn create_folder(state: State<AppState>, relative_path: String) -> Result<()
         blob_name: None,
         is_dir: true,
         size: None,
+        deleted_at: None,
     });
     save_index(&vault_dir, key, &index)
 }
@@ -908,6 +1074,11 @@ pub fn list_vault_files(state: State<AppState>) -> Result<Vec<VaultFileEntry>, S
     Ok(entries)
 }
 
+/// Moves a file or folder (and, for a folder, everything under it) to
+/// trash rather than deleting it outright: blobs stay on disk untouched,
+/// entries move from `index.entries` to `index.trash` with a deletion
+/// timestamp. See `restore_vault_entry` to undo this and `empty_trash` /
+/// `permanently_delete_trash_entry` to actually free the space.
 #[tauri::command]
 pub fn delete_vault_entry(state: State<AppState>, relative_path: String) -> Result<(), String> {
     let guard = lock_recover(&state.vault_key);
@@ -917,35 +1088,184 @@ pub fn delete_vault_entry(state: State<AppState>, relative_path: String) -> Resu
     let mut index = load_or_upgrade_index(&vault_dir, key)?;
     let normalized = normalize_relative_path(&relative_path)?;
 
-    // Collect entries to remove: exact match and, for directories, any children
-    let mut to_remove = Vec::new();
+    // Collect entries to move: exact match and, for directories, any children
+    let mut to_trash = Vec::new();
     for (i, entry) in index.entries.iter().enumerate() {
+        if entry.original_path == normalized || entry.original_path.starts_with(&format!("{}/", normalized)) {
+            to_trash.push(i);
+        }
+    }
+
+    if to_trash.is_empty() {
+        return Err("path not found".to_string());
+    }
+
+    let deleted_at = now_unix_seconds();
+    // iterate in reverse so indices are stable while removing
+    to_trash.sort_unstable_by(|a, b| b.cmp(a));
+    for idx in to_trash {
+        let mut entry = index.entries.remove(idx);
+        entry.deleted_at = Some(deleted_at);
+        index.trash.push(entry);
+    }
+
+    // Ancestor folders left with nothing in them as a result vanish
+    // outright rather than moving to trash themselves — same as before
+    // trash existed, and consistent with how an ordinary empty folder
+    // isn't independently "a thing" worth recovering.
+    prune_empty_directories(&mut index);
+
+    save_index(&vault_dir, key, &index)?;
+    Ok(())
+}
+
+/// Lists what's currently in trash — but only the *roots* of each deletion
+/// (an entry whose parent isn't also in trash), not every individual
+/// descendant: deleting one big folder should read as one trash entry to
+/// restore or purge, not hundreds of individual file rows.
+#[tauri::command]
+pub fn list_trash(state: State<AppState>) -> Result<Vec<TrashEntry>, String> {
+    let guard = lock_recover(&state.vault_key);
+    let key = guard.as_ref().ok_or("vault is locked")?;
+
+    let vault_dir = usb_root::vault_dir(&state.root);
+    let index = load_or_upgrade_index(&vault_dir, key)?;
+
+    let mut entries = index
+        .trash
+        .iter()
+        .filter(|entry| is_trash_root(&index, entry))
+        .map(|entry| TrashEntry {
+            path: entry.original_path.clone(),
+            size: entry.size.unwrap_or(0),
+            is_dir: entry.is_dir,
+            deleted_at: entry.deleted_at.unwrap_or(0),
+        })
+        .collect::<Vec<_>>();
+
+    entries.sort_by(|a, b| b.deleted_at.cmp(&a.deleted_at));
+    Ok(entries)
+}
+
+fn is_trash_root(index: &VaultIndex, entry: &VaultIndexEntry) -> bool {
+    !index.trash.iter().any(|other| {
+        other.original_path != entry.original_path
+            && entry.original_path.starts_with(&format!("{}/", other.original_path))
+    })
+}
+
+/// Moves a trashed file or folder (and everything under it) back into the
+/// live vault. If the original path (or an ancestor of it) is now occupied
+/// by something else created since the deletion, the restored item is
+/// renamed the same way a fresh upload with a colliding name would be —
+/// and if the item being restored is itself a folder, every one of its
+/// former children is re-prefixed to match wherever the folder actually
+/// lands, so the whole subtree stays internally consistent.
+#[tauri::command]
+pub fn restore_vault_entry(state: State<AppState>, relative_path: String) -> Result<(), String> {
+    let guard = lock_recover(&state.vault_key);
+    let key = guard.as_ref().ok_or("vault is locked")?;
+
+    let vault_dir = usb_root::vault_dir(&state.root);
+    let mut index = load_or_upgrade_index(&vault_dir, key)?;
+    let normalized = normalize_relative_path(&relative_path)?;
+
+    let mut to_restore = Vec::new();
+    for (i, entry) in index.trash.iter().enumerate() {
+        if entry.original_path == normalized || entry.original_path.starts_with(&format!("{}/", normalized)) {
+            to_restore.push(i);
+        }
+    }
+
+    if to_restore.is_empty() {
+        return Err("item not found in trash".to_string());
+    }
+
+    let restored_root_path = if get_entry_for_path(&index, &normalized).is_some() {
+        unique_original_path(&index, &normalized)
+    } else {
+        normalized.clone()
+    };
+
+    to_restore.sort_unstable_by(|a, b| b.cmp(a));
+    let mut restored: Vec<VaultIndexEntry> =
+        to_restore.into_iter().map(|idx| index.trash.remove(idx)).collect();
+    // Shallowest path first, so a restored folder is back in `entries`
+    // before its own children are processed.
+    restored.sort_by_key(|entry| entry.original_path.matches('/').count());
+
+    let child_prefix = format!("{normalized}/");
+    for mut entry in restored {
+        entry.deleted_at = None;
+        entry.original_path = if entry.original_path == normalized {
+            restored_root_path.clone()
+        } else if let Some(suffix) = entry.original_path.strip_prefix(&child_prefix) {
+            format!("{restored_root_path}/{suffix}")
+        } else {
+            entry.original_path
+        };
+        ensure_parent_directories(&mut index, &entry.original_path)?;
+        index.entries.push(entry);
+    }
+
+    save_index(&vault_dir, key, &index)?;
+    Ok(())
+}
+
+/// Permanently removes one item (and everything under it) from trash —
+/// unlike `delete_vault_entry`, this actually deletes the blob(s), freeing
+/// the space. See `empty_trash` to do this for everything in trash at once.
+#[tauri::command]
+pub fn permanently_delete_trash_entry(state: State<AppState>, relative_path: String) -> Result<(), String> {
+    let guard = lock_recover(&state.vault_key);
+    let key = guard.as_ref().ok_or("vault is locked")?;
+
+    let vault_dir = usb_root::vault_dir(&state.root);
+    let mut index = load_or_upgrade_index(&vault_dir, key)?;
+    let normalized = normalize_relative_path(&relative_path)?;
+    let data_dir = ensure_data_dir(&vault_dir)?;
+
+    let mut to_remove = Vec::new();
+    for (i, entry) in index.trash.iter().enumerate() {
         if entry.original_path == normalized || entry.original_path.starts_with(&format!("{}/", normalized)) {
             to_remove.push(i);
         }
     }
 
     if to_remove.is_empty() {
-        return Err("path not found".to_string());
+        return Err("item not found in trash".to_string());
     }
 
-    // Remove blobs for the entries we're deleting
-    let data_dir = ensure_data_dir(&vault_dir)?;
-    // iterate in reverse so indices are stable when removing
     to_remove.sort_unstable_by(|a, b| b.cmp(a));
     for idx in to_remove {
-        if let Some(entry) = index.entries.get(idx) {
-            if let Some(blob) = &entry.blob_name {
-                let _ = fs::remove_file(data_dir.join(blob));
-            }
+        let entry = index.trash.remove(idx);
+        if let Some(blob) = &entry.blob_name {
+            let _ = fs::remove_file(data_dir.join(blob));
         }
-        index.entries.remove(idx);
     }
 
-    prune_empty_directories(&mut index);
+    save_index(&vault_dir, key, &index)
+}
 
-    save_index(&vault_dir, key, &index)?;
-    Ok(())
+/// Permanently empties trash entirely — every blob it references is
+/// deleted, freeing the space. `async`: can be real, scaling I/O for a
+/// trash full of large files, same reasoning as `change_passphrase`.
+#[tauri::command(async)]
+pub fn empty_trash(state: State<AppState>) -> Result<(), String> {
+    let guard = lock_recover(&state.vault_key);
+    let key = guard.as_ref().ok_or("vault is locked")?;
+
+    let vault_dir = usb_root::vault_dir(&state.root);
+    let mut index = load_or_upgrade_index(&vault_dir, key)?;
+    let data_dir = ensure_data_dir(&vault_dir)?;
+
+    for entry in index.trash.drain(..) {
+        if let Some(blob) = &entry.blob_name {
+            let _ = fs::remove_file(data_dir.join(blob));
+        }
+    }
+
+    save_index(&vault_dir, key, &index)
 }
 
 /// `destination` comes from a native OS save-file dialog the user picked

@@ -15,6 +15,19 @@ use std::path::{Path, PathBuf};
 /// the exe's own folder doesn't work, `linux_fallback::resolve` takes over —
 /// see its doc comment.
 pub fn find_usb_root() -> io::Result<PathBuf> {
+    // An explicit choice from Settings (see `set_vault_root_override`)
+    // always wins over the default exe-relative location, on every OS —
+    // including Windows, which otherwise has no way at all to point
+    // Lockbox somewhere other than wherever the exe happens to be.
+    if let Some(overridden) = vault_root_config::load() {
+        if ensure_layout(&overridden).is_ok() {
+            return Ok(overridden);
+        }
+        // The saved override is gone or unwritable right now (drive
+        // unplugged, folder moved) — fall through to the normal default
+        // resolution rather than failing outright on a stale choice.
+    }
+
     let exe_root = candidate_root()?;
 
     match ensure_layout(&exe_root) {
@@ -30,6 +43,30 @@ pub fn find_usb_root() -> io::Result<PathBuf> {
             }
         }
     }
+}
+
+/// Points Lockbox at a different vault folder from now on (from the next
+/// launch — see `commands::set_vault_root_override`'s doc comment for why
+/// this doesn't take effect live). Validates `new_root` the same way
+/// startup does — it must actually be usable as a vault root, i.e.
+/// writable — before saving it, so a bad choice fails immediately with a
+/// clear reason instead of silently bricking the next launch.
+pub fn set_vault_root_override(new_root: &Path) -> io::Result<()> {
+    ensure_layout(new_root)?;
+    vault_root_config::save(new_root)
+}
+
+/// Forgets the override set by `set_vault_root_override`, reverting to the
+/// default exe-relative resolution (and, on Linux, the remembered-or-picked
+/// fallback) from the next launch on.
+pub fn clear_vault_root_override() -> io::Result<()> {
+    vault_root_config::clear()
+}
+
+/// The override set by `set_vault_root_override`, if any — for Settings to
+/// show what's currently configured.
+pub fn vault_root_override() -> Option<PathBuf> {
+    vault_root_config::load()
 }
 
 /// Where to look first: `std::env::current_exe()`'s own folder, *except*
@@ -154,17 +191,15 @@ pub fn tools_dir(root: &Path) -> PathBuf {
     root.join("Tools")
 }
 
-/// Resolves USB_ROOT for a `.deb`-installed Lockbox, where the running exe
-/// lives at a fixed, non-writable system path (e.g. `/usr/bin/lockbox`)
-/// instead of next to a self-contained drive layout the way the Windows
-/// portable exe does. In that case there's no folder to default to, so this
-/// remembers a folder the user picks once: a small JSON config under
-/// `$XDG_CONFIG_HOME/lockbox` (or `~/.config/lockbox` if that's unset) names
-/// the chosen vault folder, checked first on every subsequent launch before
-/// falling back to asking again via a native folder-picker.
-#[cfg(target_os = "linux")]
-mod linux_fallback {
-    use super::{ensure_layout, io, Path, PathBuf};
+/// The vault-root override: a small JSON config file naming a specific
+/// folder to use as USB_ROOT, checked first by `find_usb_root` before any
+/// default resolution runs, on every OS. Two things write to it: Settings'
+/// "Change Vault Location" (`commands::set_vault_root_override`, any OS),
+/// and — on Linux only — `linux_fallback`'s own automatic
+/// remember-what-was-picked-or-found behavior for a `.deb` install with no
+/// writable folder next to the exe. Same file, same format, either way.
+mod vault_root_config {
+    use super::{io, Path, PathBuf};
     use serde::{Deserialize, Serialize};
 
     #[derive(Serialize, Deserialize)]
@@ -172,22 +207,35 @@ mod linux_fallback {
         vault_root: PathBuf,
     }
 
+    /// `$XDG_CONFIG_HOME/lockbox/config.json` (or `~/.config/lockbox/...`)
+    /// on Linux; `%APPDATA%\lockbox\config.json` on Windows — each OS's own
+    /// conventional per-user config location, so this sits alongside where
+    /// other desktop apps keep their settings rather than anywhere
+    /// Lockbox-specific.
     fn config_path() -> Option<PathBuf> {
-        let config_home = std::env::var_os("XDG_CONFIG_HOME")
-            .map(PathBuf::from)
-            .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))?;
-        Some(config_home.join("lockbox").join("config.json"))
+        #[cfg(target_os = "linux")]
+        {
+            let config_home = std::env::var_os("XDG_CONFIG_HOME")
+                .map(PathBuf::from)
+                .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))?;
+            Some(config_home.join("lockbox").join("config.json"))
+        }
+        #[cfg(windows)]
+        {
+            let appdata = std::env::var_os("APPDATA").map(PathBuf::from)?;
+            Some(appdata.join("lockbox").join("config.json"))
+        }
     }
 
-    fn load_remembered_root() -> Option<PathBuf> {
+    pub(super) fn load() -> Option<PathBuf> {
         let raw = std::fs::read_to_string(config_path()?).ok()?;
         let config: StoredConfig = serde_json::from_str(&raw).ok()?;
         Some(config.vault_root)
     }
 
-    fn remember_root(root: &Path) -> io::Result<()> {
+    pub(super) fn save(root: &Path) -> io::Result<()> {
         let path = config_path()
-            .ok_or_else(|| io::Error::other("couldn't determine a config directory (no $HOME set)"))?;
+            .ok_or_else(|| io::Error::other("couldn't determine a config directory for this user"))?;
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -197,6 +245,30 @@ mod linux_fallback {
         .map_err(io::Error::other)?;
         std::fs::write(path, json)
     }
+
+    pub(super) fn clear() -> io::Result<()> {
+        match config_path() {
+            Some(path) => match std::fs::remove_file(path) {
+                Ok(()) => Ok(()),
+                Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+                Err(e) => Err(e),
+            },
+            None => Ok(()),
+        }
+    }
+}
+
+/// Resolves USB_ROOT for a `.deb`-installed Lockbox, where the running exe
+/// lives at a fixed, non-writable system path (e.g. `/usr/bin/lockbox`)
+/// instead of next to a self-contained drive layout the way the Windows
+/// portable exe does. In that case there's no folder to default to, so this
+/// remembers a folder the user picks once (via `vault_root_config`,
+/// shared with the cross-OS override above), checked first on every
+/// subsequent launch before falling back to asking again via a native
+/// folder-picker.
+#[cfg(target_os = "linux")]
+mod linux_fallback {
+    use super::{ensure_layout, io, vault_root_config, Path, PathBuf};
 
     /// Common Linux removable-media mount roots — desktop environments don't
     /// agree on a scheme (GNOME/most distros: `/media/<user>/<label>` or
@@ -251,22 +323,17 @@ mod linux_fallback {
     /// the final error message if the user cancels the picker, so a
     /// relaunch-and-retry attempt (from `fatal_startup_error`'s breadcrumb
     /// log, see lib.rs) explains what happened, not just "no folder chosen."
+    ///
+    /// `find_usb_root` has already checked `vault_root_config` for a saved
+    /// choice by the time this runs (and it didn't work, or there wasn't
+    /// one) — no need to check it again here.
     pub(super) fn resolve(original_err: io::Error) -> io::Result<PathBuf> {
-        if let Some(remembered) = load_remembered_root() {
-            if ensure_layout(&remembered).is_ok() {
-                return Ok(remembered);
-            }
-            // The remembered folder is gone or unwritable now (drive
-            // unplugged, moved, etc.) — fall through and ask again rather
-            // than failing permanently on a stale path.
-        }
-
-        // No remembered choice on this machine yet — before asking, check
-        // whether a vault set up elsewhere (this same drive, a different OS
-        // or machine) is already plugged in and just needs finding.
+        // Check whether a vault set up elsewhere (this same drive, a
+        // different OS or machine) is already plugged in and just needs
+        // finding, before asking.
         if let Some(found) = find_existing_vault() {
             if ensure_layout(&found).is_ok() {
-                let _ = remember_root(&found);
+                let _ = vault_root_config::save(&found);
                 return Ok(found);
             }
         }
@@ -284,7 +351,7 @@ mod linux_fallback {
         };
 
         ensure_layout(&picked)?;
-        remember_root(&picked)?;
+        vault_root_config::save(&picked)?;
         Ok(picked)
     }
 }

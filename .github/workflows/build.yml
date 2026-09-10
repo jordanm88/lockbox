@@ -7,8 +7,6 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
     inputs:
       publish_release:
@@ -18,6 +16,11 @@ on:
 
 jobs:
   build:
+    # No pull_request trigger above, so in practice this only ever sees
+    # push-to-main and tag pushes — this guard exists specifically for
+    # workflow_dispatch, which the GitHub UI otherwise lets anyone fire
+    # against any branch they pick from the dropdown.
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     strategy:
       fail-fast: false
       # A specific Ubuntu version is pinned rather than ubuntu-latest so the

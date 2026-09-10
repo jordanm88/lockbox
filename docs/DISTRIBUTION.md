@@ -218,17 +218,41 @@ The AppImage needs no install step: `chmod +x` it and run it directly.
 
 ### Blank window on launch (AppImage especially)
 
-If the window opens but stays completely blank — no error, nothing in the
-console — this is WebKitGTK disagreeing with your GPU/driver combo (common
-with proprietary NVIDIA drivers, some VM/software rendering setups, and
-disproportionately common under AppImage). It's a widely reported
-WebKitGTK/Tauri issue on Linux in general, not specific to Lockbox — see
-Tauri's own [Linux Graphics
+Two distinct problems can cause this, and they need different fixes — check
+what's actually printed to the console (run it from a terminal) before
+picking one.
+
+**`Could not create default EGL display: EGL_BAD_PARAMETER`, usually
+alongside `undefined symbol` errors from `gio`/`gvfs`/`libmount`:** this is
+[tauri-apps/tauri#15665](https://github.com/tauri-apps/tauri/issues/15665)
+— Tauri's AppImage bundler (linuxdeploy) over-bundles a handful of
+libraries (`libwayland-client` above all, plus the whole GLib family and a
+few others) that need to come from the host system, not be shipped inside
+the AppImage. `libwayland-client` is the one that actually breaks
+rendering: a bundled copy loaded against a host Mesa newer than the one it
+was built against makes `eglGetDisplay` fail outright, which aborts
+WebKitWebProcess before it ever paints anything — the window opens (it's a
+separate process from the one that just crashed) and stays permanently
+blank, with nothing further logged. Confirmed by hand: stripping the
+over-bundled libraries from a built AppImage and re-running it is the exact
+difference between WebKitWebProcess aborting on EGL init and running
+normally with a real GPU render-node handle open. There's no
+`tauri.conf.json` setting for this (yet), so the `Fix over-bundled AppImage
+libraries` CI step in `.github/workflows/build.yml` does it as a build-time
+fixup: extract, delete the offending `.so` files so the dynamic linker
+falls through to the host's own copies, repackage with `appimagetool`. If
+you're building locally rather than via CI, run that same step yourself (or
+extract with `--appimage-extract`, delete the libraries it removes, and
+repackage) — no environment variable works around this; the process
+aborts before any of them would even be checked.
+
+**Genuinely just WebKitGTK disagreeing with your GPU/driver combo**
+(proprietary NVIDIA drivers, some VM/software rendering setups) once the
+above isn't the cause: see Tauri's own [Linux Graphics
 Issues](https://v2.tauri.app/develop/debug/linux-graphics/) troubleshooting
 page. `lib.rs::apply_linux_webview_workarounds` sets all three of that
 page's documented workarounds automatically before Tauri starts (unless
-you've already set any of them yourself), so this shouldn't come up in
-practice — but if it does anyway (e.g. running an older build), set them by
+you've already set any of them yourself); if it's still blank, set them by
 hand, in this order (each is a bigger hammer than the last):
 
 ```bash
@@ -236,18 +260,6 @@ __NV_DISABLE_EXPLICIT_SYNC=1 ./Lockbox.AppImage
 WEBKIT_DISABLE_DMABUF_RENDERER=1 ./Lockbox.AppImage
 WEBKIT_DISABLE_COMPOSITING_MODE=1 ./Lockbox.AppImage
 ```
-
-If none of these help, run it from a terminal and check for anything
-printed to stdout/stderr — worth including if you end up filing an issue.
-In particular, `Could not create default EGL display: EGL_BAD_PARAMETER`
-alongside `undefined symbol` errors from `gio`/`gvfs` is a different,
-more specific problem than the env vars above address: it means the
-AppImage's *bundled* webkit2gtk/GLib/Mesa are too old for the host system
-(see the CI base-image note above — this is exactly why it's built on
-`ubuntu-24.04` rather than something older). If you're building locally,
-building on a distro from roughly the last two years, not an old LTS
-chosen only for glibc compatibility, is the actual fix; no environment
-variable papers over a library version this far apart.
 
 ### Where the vault lives
 

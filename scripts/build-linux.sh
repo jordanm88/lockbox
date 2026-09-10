@@ -50,4 +50,50 @@ if [ -d "$DEB_DIR" ]; then
     done
 fi
 
+# Tauri's AppImage bundler over-bundles libraries (libwayland-client above
+# all) that must come from the host system, not be shipped inside the
+# AppImage — see https://github.com/tauri-apps/tauri/issues/15665 and the
+# matching CI step in .github/workflows/build.yml, which this mirrors.
+# Left uncorrected, a bundled libwayland-client loaded against any host
+# Mesa newer than this machine's makes EGL init fail on launch, aborting
+# WebKitWebProcess before it ever paints anything — the window opens but
+# stays permanently blank. Skipped gracefully (with a note) if
+# appimagetool can't be fetched, rather than failing the whole build over
+# what's still a usable — just not Mesa-25+-safe — AppImage.
+APPIMAGE_DIR="$REPO_ROOT/src-tauri/target/release/bundle/appimage"
+if [ -d "$APPIMAGE_DIR" ]; then
+    for appimage in "$APPIMAGE_DIR"/*.AppImage; do
+        [ -e "$appimage" ] || continue
+        chmod +x "$appimage"
+        workdir=$(mktemp -d)
+        if (cd "$workdir" && "$appimage" --appimage-extract >/dev/null 2>&1) \
+            && curl -sL -o "$workdir/appimagetool.AppImage" \
+                https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage \
+            && chmod +x "$workdir/appimagetool.AppImage"; then
+            rm -f "$workdir"/squashfs-root/usr/lib/libwayland-client.so* \
+                  "$workdir"/squashfs-root/usr/lib/libwayland-server.so* \
+                  "$workdir"/squashfs-root/usr/lib/libglib-2.0.so* \
+                  "$workdir"/squashfs-root/usr/lib/libgio-2.0.so* \
+                  "$workdir"/squashfs-root/usr/lib/libgobject-2.0.so* \
+                  "$workdir"/squashfs-root/usr/lib/libgmodule-2.0.so* \
+                  "$workdir"/squashfs-root/usr/lib/libmount.so* \
+                  "$workdir"/squashfs-root/usr/lib/libblkid.so* \
+                  "$workdir"/squashfs-root/usr/lib/libselinux.so* \
+                  "$workdir"/squashfs-root/usr/lib/libpcre2-8.so* \
+                  "$workdir"/squashfs-root/usr/lib/libzstd.so* \
+                  "$workdir"/squashfs-root/usr/lib/libelf.so* \
+                  "$workdir"/squashfs-root/usr/lib/libffi.so*
+            rm -f "$appimage"
+            ARCH=x86_64 "$workdir/appimagetool.AppImage" --appimage-extract-and-run \
+                "$workdir/squashfs-root" "$appimage"
+            echo "Fixed over-bundled libraries in $(basename "$appimage")"
+        else
+            echo "warning: couldn't fix over-bundled AppImage libraries (offline? appimagetool unreachable?) — shipping as-is, may show a blank window on newer Mesa" >&2
+        fi
+        rm -rf "$workdir"
+        [ -e "$appimage" ] && cp "$appimage" "$REPO_ROOT/$OUTPUT_DIR/"
+        echo "Built: $REPO_ROOT/$OUTPUT_DIR/$(basename "$appimage")"
+    done
+fi
+
 echo "Linux build complete. Output is in $REPO_ROOT/$OUTPUT_DIR"

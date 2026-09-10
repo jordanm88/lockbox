@@ -85,6 +85,59 @@ jobs:
       - name: Build Tauri app
         run: npm run tauri -- build
 
+      # Tauri's AppImage bundler (linuxdeploy) over-bundles a handful of
+      # libraries that must come from the host system, not be shipped inside
+      # the AppImage — see https://github.com/tauri-apps/tauri/issues/15665.
+      # The worst offender is libwayland-client: bundling it makes
+      # eglGetDisplay(EGL_DEFAULT_DISPLAY) fail with EGL_BAD_PARAMETER
+      # against any host Mesa newer than this runner's, which aborts
+      # WebKitWebProcess before it ever paints anything — the window opens
+      # but stays permanently blank, with nothing in the console to explain
+      # why (confirmed by hand: stripping these same libraries from a built
+      # AppImage and re-running it is the difference between
+      # WebKitWebProcess aborting on EGL init and it running normally with a
+      # real GPU render-node handle open). Tauri has no config knob for this
+      # yet, so it's fixed here: extract, delete the offending libraries (so
+      # the dynamic linker falls through to the host's own, which is what a
+      # correctly-built AppImage should rely on for anything this
+      # display-server/kernel-adjacent anyway), repackage with the same
+      # tool the community pkg2appimage excludelist is built around.
+      - name: Fix over-bundled AppImage libraries (Mesa 25+ EGL compatibility)
+        if: runner.os == 'Linux'
+        run: |
+          set -e
+          appimage_path=$(find "$PWD/src-tauri/target/release/bundle/appimage" -name "*.AppImage" | head -1)
+          if [ -z "$appimage_path" ]; then
+            echo "no AppImage found under bundle/appimage — skipping" >&2
+            exit 0
+          fi
+
+          chmod +x "$appimage_path"
+          workdir=$(mktemp -d)
+          (cd "$workdir" && "$appimage_path" --appimage-extract >/dev/null)
+
+          rm -f "$workdir"/squashfs-root/usr/lib/libwayland-client.so* \
+                "$workdir"/squashfs-root/usr/lib/libwayland-server.so* \
+                "$workdir"/squashfs-root/usr/lib/libglib-2.0.so* \
+                "$workdir"/squashfs-root/usr/lib/libgio-2.0.so* \
+                "$workdir"/squashfs-root/usr/lib/libgobject-2.0.so* \
+                "$workdir"/squashfs-root/usr/lib/libgmodule-2.0.so* \
+                "$workdir"/squashfs-root/usr/lib/libmount.so* \
+                "$workdir"/squashfs-root/usr/lib/libblkid.so* \
+                "$workdir"/squashfs-root/usr/lib/libselinux.so* \
+                "$workdir"/squashfs-root/usr/lib/libpcre2-8.so* \
+                "$workdir"/squashfs-root/usr/lib/libzstd.so* \
+                "$workdir"/squashfs-root/usr/lib/libelf.so* \
+                "$workdir"/squashfs-root/usr/lib/libffi.so*
+
+          curl -sL -o "$workdir/appimagetool.AppImage" \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x "$workdir/appimagetool.AppImage"
+          rm -f "$appimage_path"
+          ARCH=x86_64 "$workdir/appimagetool.AppImage" --appimage-extract-and-run \
+            "$workdir/squashfs-root" "$appimage_path"
+          rm -rf "$workdir"
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:

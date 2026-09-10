@@ -194,11 +194,16 @@ This produces `src-tauri/target/release/Lockbox` (the raw Linux binary) and,
 under `src-tauri/target/release/bundle/`, both `deb/*.deb` and
 `appimage/*.AppImage` (Tauri's bundler builds every target valid for the
 host OS since `tauri.conf.json`'s `bundle.targets` is `"all"`). CI
-(`.github/workflows/build.yml`) builds this on `ubuntu-22.04` — pinned
-rather than `ubuntu-latest` so the `.deb`'s glibc requirement doesn't creep
-up whenever GitHub bumps the default runner — and every GitHub release
-attaches both the `.deb` and the `.AppImage` alongside the Windows
-artifacts.
+(`.github/workflows/build.yml`) builds this on `ubuntu-24.04` — a specific
+version pinned rather than `ubuntu-latest` so the `.deb`'s glibc requirement
+doesn't creep up whenever GitHub bumps the default runner, and 24.04
+specifically (not 22.04) because the AppImage bundles its build system's
+actual webkit2gtk/GLib/Mesa rather than just linking against them at
+runtime — built on 22.04 (GLib 2.72), that bundle is old enough to fail
+outright (EGL display creation errors, GIO module symbol mismatches) when
+run on a reasonably current host, even one with a perfectly working native
+GPU/EGL stack otherwise. Every GitHub release attaches both the `.deb` and
+the `.AppImage` alongside the Windows artifacts.
 
 ### Install
 
@@ -233,9 +238,16 @@ WEBKIT_DISABLE_COMPOSITING_MODE=1 ./Lockbox.AppImage
 ```
 
 If none of these help, run it from a terminal and check for anything
-printed to stdout/stderr (a crash or an explicit error is a different,
-more specific problem than the blank-window graphics issue these variables
-address) — worth including if you end up filing an issue.
+printed to stdout/stderr — worth including if you end up filing an issue.
+In particular, `Could not create default EGL display: EGL_BAD_PARAMETER`
+alongside `undefined symbol` errors from `gio`/`gvfs` is a different,
+more specific problem than the env vars above address: it means the
+AppImage's *bundled* webkit2gtk/GLib/Mesa are too old for the host system
+(see the CI base-image note above — this is exactly why it's built on
+`ubuntu-24.04` rather than something older). If you're building locally,
+building on a distro from roughly the last two years, not an old LTS
+chosen only for glibc compatibility, is the actual fix; no environment
+variable papers over a library version this far apart.
 
 ### Where the vault lives
 

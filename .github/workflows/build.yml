@@ -20,12 +20,24 @@ jobs:
   build:
     strategy:
       fail-fast: false
-      # ubuntu-22.04 is pinned rather than ubuntu-latest so the .deb's glibc
-      # requirement doesn't silently creep up whenever GitHub bumps the
-      # default runner's Ubuntu version — a .deb built against a newer glibc
-      # than a user's system ships refuses to install there.
+      # A specific Ubuntu version is pinned rather than ubuntu-latest so the
+      # .deb's glibc requirement doesn't silently creep up whenever GitHub
+      # bumps the default runner's Ubuntu version — a .deb built against a
+      # newer glibc than a user's system ships refuses to install there.
+      #
+      # ubuntu-24.04, not ubuntu-22.04: the AppImage bundles its build
+      # system's actual webkit2gtk/GLib/Mesa (not just links against them at
+      # runtime), and that stack is specifically the one most sensitive to
+      # "built old, run new" version skew — on 22.04 (GLib 2.72, ~2022) that
+      # bundle is old enough to fail outright (EGL display creation errors,
+      # GIO module symbol mismatches) on a current host system, even though
+      # the exact same host has a perfectly working native GPU/EGL stack.
+      # 24.04 narrows the .deb's glibc floor slightly in exchange for an
+      # AppImage that actually works on anything reasonably current — a
+      # trade worth making since a broken AppImage is worse than a marginally
+      # newer glibc requirement.
       matrix:
-        platform: [windows-latest, ubuntu-22.04]
+        platform: [windows-latest, ubuntu-24.04]
     runs-on: ${{ matrix.platform }}
     steps:
       - name: Checkout

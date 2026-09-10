@@ -270,6 +270,19 @@ the folder currently in use. If the remembered folder ever goes missing
 different path this time), Lockbox re-detects/asks again rather than
 failing outright.
 
+Running the AppImage directly *from* a USB drive is a special case worth
+calling out: `usb_root::find_usb_root` uses `$APPIMAGE` (the real path to
+the `.AppImage` file, set by every AppImage runtime) rather than the
+running binary's own location, specifically because those two differ.
+FUSE-mounts it to a read-only path under `/tmp`; without FUSE (common on
+current distros — see the AppImage note under "Build" above), it instead
+*extracts* to a writable directory under `/tmp`. That second case is the
+dangerous one if `$APPIMAGE` weren't checked first: the write would
+silently succeed in that throwaway `/tmp` directory, so every launch would
+create-or-reuse an unrelated, temporary vault there instead of ever
+touching the real one on the drive — no error, no prompt, just silently
+the wrong vault.
+
 ### Portable apps across OSes
 
 Apps installed through the App Store live at `Apps/<app>/<os>/` (not just

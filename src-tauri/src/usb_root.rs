@@ -15,11 +15,7 @@ use std::path::{Path, PathBuf};
 /// the exe's own folder doesn't work, `linux_fallback::resolve` takes over —
 /// see its doc comment.
 pub fn find_usb_root() -> io::Result<PathBuf> {
-    let exe_path = std::env::current_exe()?;
-    let exe_root = exe_path
-        .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| PathBuf::from("."));
+    let exe_root = candidate_root()?;
 
     match ensure_layout(&exe_root) {
         Ok(()) => Ok(exe_root),
@@ -34,6 +30,41 @@ pub fn find_usb_root() -> io::Result<PathBuf> {
             }
         }
     }
+}
+
+/// Where to look first: `std::env::current_exe()`'s own folder, *except*
+/// for an AppImage, where that's actively misleading. An AppImage's
+/// contents get FUSE-mounted (or, if FUSE isn't available — increasingly
+/// common; several current distros no longer ship it by default —
+/// extracted) to a location that has nothing to do with wherever the
+/// `.AppImage` file itself sits: a read-only squashfs mount under `/tmp` in
+/// the FUSE case, but a genuinely *writable* extraction directory under
+/// `/tmp` in the no-FUSE case. That second case is the dangerous one: it's
+/// writable, so the normal "create Vault/ here" step would silently
+/// succeed *there* instead of failing over to `linux_fallback`'s
+/// find-the-real-drive logic — meaning every run would use a fresh, empty
+/// vault in a `/tmp` directory instead of the real one on the USB drive it
+/// was launched from, with no error or indication anything was wrong.
+///
+/// Every standard AppImage runtime sets `$APPIMAGE` to the absolute path of
+/// the actual `.AppImage` file before exec'ing the wrapped app, in both the
+/// FUSE-mounted and extract-and-run cases — checking that first, and using
+/// *its* parent directory instead of the running binary's, is what actually
+/// answers "where does this portable copy of Lockbox live," matching the
+/// same "next to the exe" model the Windows portable exe already uses.
+fn candidate_root() -> io::Result<PathBuf> {
+    #[cfg(target_os = "linux")]
+    if let Some(appimage_path) = std::env::var_os("APPIMAGE") {
+        if let Some(parent) = Path::new(&appimage_path).parent() {
+            return Ok(parent.to_path_buf());
+        }
+    }
+
+    let exe_path = std::env::current_exe()?;
+    Ok(exe_path
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from(".")))
 }
 
 fn ensure_layout(root: &Path) -> io::Result<()> {

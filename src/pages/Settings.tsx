@@ -2,7 +2,17 @@ import { useEffect, useState } from "react";
 import PageHeader from "../components/PageHeader";
 import { AUTO_LOCK_OPTIONS, AutoLockOption } from "../types";
 import { checkDriveEncryption, DriveEncryptionStatus } from "../lib/securityBridge";
-import { changePassphrase, getPlatform, getVaultRoot } from "../lib/vaultBridge";
+import {
+  changePassphrase,
+  clearVaultRootOverride,
+  getPlatform,
+  getVaultRoot,
+  getVaultRootOverride,
+  setVaultRootOverride,
+  verifyVault,
+  VaultVerifyReport,
+} from "../lib/vaultBridge";
+import { getEffectiveTheme, setTheme } from "../lib/theme";
 import { getErrorMessage } from "../lib/errors";
 
 interface SettingsProps {
@@ -39,6 +49,23 @@ export default function Settings({
   const [passphraseStatus, setPassphraseStatus] = useState<{ kind: "ok" | "error"; text: string } | null>(
     null,
   );
+
+  const [verifying, setVerifying] = useState(false);
+  const [verifyReport, setVerifyReport] = useState<VaultVerifyReport | null>(null);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+
+  async function handleVerifyVault() {
+    setVerifying(true);
+    setVerifyError(null);
+    setVerifyReport(null);
+    try {
+      setVerifyReport(await verifyVault());
+    } catch (err) {
+      setVerifyError(getErrorMessage(err, "Failed to verify the vault."));
+    } finally {
+      setVerifying(false);
+    }
+  }
 
   async function handleChangePassphrase() {
     setPassphraseStatus(null);
@@ -77,6 +104,16 @@ export default function Settings({
   const [checkingDrive, setCheckingDrive] = useState(false);
   const [platform, setPlatform] = useState<string | null>(null);
   const [vaultRoot, setVaultRoot] = useState<string | null>(null);
+  const [vaultRootOverride, setVaultRootOverrideState] = useState<string | null>(null);
+  const [darkMode, setDarkMode] = useState(() => getEffectiveTheme() === "dark");
+
+  function handleToggleDarkMode() {
+    const next = !darkMode;
+    setDarkMode(next);
+    setTheme(next ? "dark" : "light");
+  }
+  const [changingLocation, setChangingLocation] = useState(false);
+  const [locationStatus, setLocationStatus] = useState<string | null>(null);
 
   async function runDriveCheck() {
     setCheckingDrive(true);
@@ -87,11 +124,50 @@ export default function Settings({
     }
   }
 
+  function refreshVaultRootOverride() {
+    getVaultRootOverride().then(setVaultRootOverrideState).catch(() => {});
+  }
+
   useEffect(() => {
     runDriveCheck();
     getPlatform().then(setPlatform).catch(() => {});
     getVaultRoot().then(setVaultRoot).catch(() => {});
+    refreshVaultRootOverride();
   }, []);
+
+  async function handleChangeVaultLocation() {
+    setLocationStatus(null);
+    setChangingLocation(true);
+    try {
+      const picked = await setVaultRootOverride();
+      if (picked) {
+        setLocationStatus(
+          `Vault location set to "${picked}". This takes effect the next time Lockbox starts — ` +
+            "close and reopen it to switch. Nothing was moved: if that folder doesn't already " +
+            "have a vault in it, Lockbox will start a brand new one there.",
+        );
+        refreshVaultRootOverride();
+      }
+    } catch (err) {
+      setLocationStatus(getErrorMessage(err, "Failed to set the new vault location."));
+    } finally {
+      setChangingLocation(false);
+    }
+  }
+
+  async function handleResetVaultLocation() {
+    setLocationStatus(null);
+    setChangingLocation(true);
+    try {
+      await clearVaultRootOverride();
+      setLocationStatus("Reset to the default location. This takes effect next time Lockbox starts.");
+      refreshVaultRootOverride();
+    } catch (err) {
+      setLocationStatus(getErrorMessage(err, "Failed to reset the vault location."));
+    } finally {
+      setChangingLocation(false);
+    }
+  }
 
   return (
     <div>
@@ -155,6 +231,62 @@ export default function Settings({
           className="neo-btn mt-4 bg-white px-4 py-2 text-sm"
         >
           {checkingDrive ? "Checking…" : "Re-check"}
+        </button>
+      </div>
+
+      <div className="neo-panel mb-6 bg-paper p-6">
+        <h3 className="mb-1 text-xl font-semibold text-ink">Vault Integrity</h3>
+        <p className="mb-4 text-sm text-slate-600">
+          Confirms every file in the vault still has its encrypted data on disk and actually
+          decrypts — catches corruption or a missing blob before you discover it by opening that
+          file. Reads and decrypts everything in the vault, so it can take a while for a large one.
+        </p>
+
+        {verifyError && (
+          <div className="neo-card border-l-4 border-l-red-500 bg-red-50 p-4 text-sm text-red-800">
+            <p className="font-bold">⚠️ Verification failed to run.</p>
+            <p className="mt-1">{verifyError}</p>
+          </div>
+        )}
+
+        {verifyReport && (
+          <div
+            className={`neo-card p-4 text-sm ${
+              verifyReport.broken.length === 0
+                ? "border-l-4 border-l-emerald-500 bg-emerald-50 text-emerald-800"
+                : "border-l-4 border-l-red-500 bg-red-50 text-red-800"
+            }`}
+          >
+            <p className="font-bold">
+              {verifyReport.broken.length === 0
+                ? `✅ All ${verifyReport.filesChecked} file(s) verified fine.`
+                : `⚠️ ${verifyReport.broken.length} of ${verifyReport.filesChecked} file(s) have a problem.`}
+            </p>
+            {verifyReport.broken.length > 0 && (
+              <ul className="ml-5 mt-2 list-disc space-y-1">
+                {verifyReport.broken.map((issue) => (
+                  <li key={issue.path}>
+                    <span className="font-semibold">{issue.path}</span> — {issue.reason}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {verifyReport.orphanedBlobs.length > 0 && (
+              <p className="mt-3 text-xs">
+                Also found {verifyReport.orphanedBlobs.length} blob(s) on disk that nothing in the
+                vault points to anymore — harmless leftovers, just unused space.
+              </p>
+            )}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={handleVerifyVault}
+          disabled={verifying}
+          className="neo-btn mt-4 bg-white px-4 py-2 text-sm disabled:opacity-60"
+        >
+          {verifying ? "Verifying…" : "Verify Vault"}
         </button>
       </div>
 
@@ -228,6 +360,28 @@ export default function Settings({
             ))}
           </div>
 
+          <div className="mt-6 border-t border-slate-200 pt-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="font-semibold text-ink">Dark Mode</div>
+                <div className="text-sm text-slate-600">
+                  Follows your system by default until you switch it here.
+                </div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={darkMode}
+                onClick={handleToggleDarkMode}
+                className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${darkMode ? "bg-blue-600" : "bg-slate-200"}`}
+              >
+                <span
+                  className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${darkMode ? "translate-x-6" : "translate-x-1"}`}
+                />
+              </button>
+            </div>
+          </div>
+
           <div className="mt-8 border-t border-slate-200 pt-6">
             <h3 className="mb-3 text-xl font-semibold text-ink">Danger Zone</h3>
             <button type="button" onClick={onLock} className="neo-btn w-full bg-neo-red py-3 text-white">
@@ -270,17 +424,61 @@ export default function Settings({
             </p>
           </div>
 
-          {platform === "linux" && vaultRoot && (
+          {vaultRoot && (
             <div className="mt-6 border-t border-slate-200 pt-4">
               <h3 className="mb-3 text-xl font-semibold text-ink">Vault Location</h3>
               <p className="text-sm text-slate-600">
-                Lockbox isn't installed as a portable exe on Linux, so it can't always default to
-                a folder right next to itself — this is the folder it's using instead, found
-                automatically or chosen on first run, and remembered from here on.
+                {platform === "linux"
+                  ? "Lockbox isn't installed as a portable exe on Linux, so it can't always " +
+                    "default to a folder right next to itself — this is the folder it's using " +
+                    "this session, found automatically, chosen on first run, or set below."
+                  : "This is the folder Lockbox is using for its vault this session."}
               </p>
               <p className="neo-card mt-2 break-all bg-paper p-3 font-mono text-xs text-ink">
                 {vaultRoot}
               </p>
+
+              <p className="mt-4 text-sm text-slate-600">
+                {vaultRootOverride
+                  ? "A custom location is set (below), overriding the default."
+                  : "Using the default location — no custom location is set."}{" "}
+                Changing it does <span className="font-semibold">not</span> move any existing
+                vault data: it only changes where Lockbox looks next time, so pick an empty
+                folder only if you mean to start a brand new vault there. Takes effect after a
+                restart, not immediately.
+              </p>
+              {vaultRootOverride && (
+                <p className="neo-card mt-2 break-all bg-paper p-3 font-mono text-xs text-ink">
+                  {vaultRootOverride}
+                </p>
+              )}
+
+              {locationStatus && (
+                <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm font-medium text-amber-800">
+                  {locationStatus}
+                </p>
+              )}
+
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={handleChangeVaultLocation}
+                  disabled={changingLocation}
+                  className="neo-btn bg-white px-4 py-2 text-sm disabled:opacity-60"
+                >
+                  {changingLocation ? "Working…" : "Change Vault Location…"}
+                </button>
+                {vaultRootOverride && (
+                  <button
+                    type="button"
+                    onClick={handleResetVaultLocation}
+                    disabled={changingLocation}
+                    className="neo-btn bg-white px-4 py-2 text-sm disabled:opacity-60"
+                  >
+                    Reset to Default
+                  </button>
+                )}
+              </div>
             </div>
           )}
 

@@ -678,7 +678,7 @@ export default function Vault({ uploading, onStartUpload }: VaultProps) {
         title={confirmTarget ? `Delete ${confirmTarget.name}?` : "Delete entry"}
         description={
           confirmTarget
-            ? `This action will permanently remove the ${confirmTarget.isDir ? "folder and everything inside it" : "file"} from the vault.`
+            ? `Moves the ${confirmTarget.isDir ? "folder and everything inside it" : "file"} to Trash — recoverable from there until it's emptied.`
             : undefined
         }
         confirmLabel="Delete"
@@ -690,7 +690,7 @@ export default function Vault({ uploading, onStartUpload }: VaultProps) {
       <ConfirmDialog
         open={bulkDeleteConfirmOpen}
         title={`Delete ${topLevelSelection().length} item${topLevelSelection().length === 1 ? "" : "s"}?`}
-        description="This action will permanently remove the selected files and folders from the vault."
+        description="Moves the selected files and folders to Trash — recoverable from there until it's emptied."
         confirmLabel="Delete"
         cancelLabel="Cancel"
         onConfirm={confirmBulkDelete}

@@ -2,6 +2,32 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme tokens. `ink`/`paper` in tailwind.config.js point at these, so
+   every `text-ink`/`bg-paper` utility (and every `.neo-*` shared class,
+   which is built from the same tokens) follows them automatically. Applied
+   via a `dark` class on <html> — see src/lib/theme.ts — not a bare
+   prefers-color-scheme media query, so a user's explicit choice always
+   wins over the OS default; when they haven't chosen, theme.ts applies the
+   class itself based on prefers-color-scheme on load, so this still
+   defaults to following the system. */
+:root {
+  --color-ink: #0f172a;
+  --color-paper: #f8fafc;
+  --color-border: rgba(15, 23, 42, 0.14);
+  --shadow-tint: rgba(15, 23, 42, 0.12);
+  --shadow-tint-lg: rgba(15, 23, 42, 0.14);
+  --shadow-tint-xl: rgba(15, 23, 42, 0.16);
+}
+
+.dark {
+  --color-ink: #e2e8f0;
+  --color-paper: #1e293b;
+  --color-border: rgba(226, 232, 240, 0.14);
+  --shadow-tint: rgba(0, 0, 0, 0.45);
+  --shadow-tint-lg: rgba(0, 0, 0, 0.5);
+  --shadow-tint-xl: rgba(0, 0, 0, 0.55);
+}
+
 html,
 body,
 #root {
@@ -14,6 +40,15 @@ body {
     radial-gradient(circle at 14% 18%, rgba(37, 99, 235, 0.08), transparent 38%),
     radial-gradient(circle at 86% 8%, rgba(14, 165, 233, 0.08), transparent 32%),
     linear-gradient(to bottom right, rgba(255, 255, 255, 0.75), rgba(248, 250, 252, 0.85));
+  transition: background-color 150ms ease-out, color 150ms ease-out;
+}
+
+.dark body {
+  @apply bg-slate-900;
+  background-image:
+    radial-gradient(circle at 14% 18%, rgba(37, 99, 235, 0.16), transparent 38%),
+    radial-gradient(circle at 86% 8%, rgba(14, 165, 233, 0.14), transparent 32%),
+    linear-gradient(to bottom right, rgba(15, 23, 42, 0.6), rgba(15, 23, 42, 0.85));
 }
 
 ::selection {

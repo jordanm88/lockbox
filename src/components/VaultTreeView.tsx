@@ -39,25 +39,25 @@ function parentPath(path: string): string {
 // file browser (Drive/Dropbox/OneDrive all color-code by type) rather than a
 // flat list — folders blue, docs blue, sheets green, media purple/pink, etc.
 function fileVisual(name: string, isDir: boolean): FileVisual {
-  if (isDir) return { icon: "📁", bg: "bg-blue-50", text: "text-blue-600" };
+  if (isDir) return { icon: "📁", bg: "bg-blue-50 dark:bg-blue-950/40", text: "text-blue-600 dark:text-blue-400" };
 
   const ext = name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
 
   if (isImageFile(name)) {
-    return { icon: "🖼️", bg: "bg-emerald-50", text: "text-emerald-600" };
+    return { icon: "🖼️", bg: "bg-emerald-50 dark:bg-emerald-950/40", text: "text-emerald-600 dark:text-emerald-400" };
   }
-  if (ext === "pdf") return { icon: "📕", bg: "bg-red-50", text: "text-red-600" };
+  if (ext === "pdf") return { icon: "📕", bg: "bg-red-50 dark:bg-red-950/40", text: "text-red-600 dark:text-red-400" };
   if (["doc", "docx", "txt", "md", "rtf", "odt"].includes(ext)) {
-    return { icon: "📄", bg: "bg-blue-50", text: "text-blue-600" };
+    return { icon: "📄", bg: "bg-blue-50 dark:bg-blue-950/40", text: "text-blue-600 dark:text-blue-400" };
   }
   if (["xls", "xlsx", "csv", "ods"].includes(ext)) {
-    return { icon: "📊", bg: "bg-green-50", text: "text-green-700" };
+    return { icon: "📊", bg: "bg-green-50 dark:bg-green-950/40", text: "text-green-700 dark:text-green-400" };
   }
   if (["ppt", "pptx", "odp"].includes(ext)) {
     return { icon: "📙", bg: "bg-orange-50", text: "text-orange-600" };
   }
   if (["zip", "7z", "rar", "tar", "gz", "xz"].includes(ext)) {
-    return { icon: "🗜️", bg: "bg-amber-50", text: "text-amber-600" };
+    return { icon: "🗜️", bg: "bg-amber-50 dark:bg-amber-950/40", text: "text-amber-600 dark:text-amber-400" };
   }
   if (["mp3", "wav", "flac", "ogg", "m4a"].includes(ext)) {
     return { icon: "🎵", bg: "bg-purple-50", text: "text-purple-600" };
@@ -197,7 +197,7 @@ export default function VaultTreeView({
 
           {!isSearching && (
             <div className="flex flex-wrap items-center gap-1.5 text-sm text-slate-500">
-              <button type="button" onClick={() => setCurrentPath("")} className="rounded-full px-2 py-1 font-medium text-blue-600 hover:bg-blue-50">
+              <button type="button" onClick={() => setCurrentPath("")} className="rounded-full px-2 py-1 font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40">
                 My Vault
               </button>
               {crumbs.map((crumb, index) => {
@@ -208,7 +208,7 @@ export default function VaultTreeView({
                     <button
                       type="button"
                       onClick={() => setCurrentPath(path)}
-                      className="rounded-full px-2 py-1 font-medium text-slate-600 hover:bg-slate-100 hover:text-blue-600"
+                      className="rounded-full px-2 py-1 font-medium text-slate-600 hover:bg-slate-100 hover:text-blue-600 dark:hover:text-blue-400"
                     >
                       {crumb}
                     </button>
@@ -229,29 +229,29 @@ export default function VaultTreeView({
         </div>
 
         {selectedPaths.size > 0 && (
-          <div className="flex flex-wrap items-center gap-3 border-b border-blue-100 bg-blue-50 px-5 py-3">
-            <p className="text-sm font-semibold text-blue-800">
+          <div className="flex flex-wrap items-center gap-3 border-b border-blue-100 dark:border-blue-800/60 bg-blue-50 dark:bg-blue-950/40 px-5 py-3">
+            <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">
               {selectedPaths.size} item{selectedPaths.size === 1 ? "" : "s"} selected
             </p>
             <div className="ml-auto flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={onBulkExport}
-                className="rounded-full bg-white px-3.5 py-1.5 text-sm font-medium text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-50"
+                className="rounded-full bg-white px-3.5 py-1.5 text-sm font-medium text-emerald-700 dark:text-emerald-400 ring-1 ring-emerald-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
               >
                 ⬇ Export selected
               </button>
               <button
                 type="button"
                 onClick={onBulkDelete}
-                className="rounded-full bg-white px-3.5 py-1.5 text-sm font-medium text-rose-600 ring-1 ring-rose-200 hover:bg-rose-50"
+                className="rounded-full bg-white px-3.5 py-1.5 text-sm font-medium text-rose-600 dark:text-rose-400 ring-1 ring-rose-200 hover:bg-rose-50 dark:hover:bg-rose-950/40"
               >
                 🗑 Delete selected
               </button>
               <button
                 type="button"
                 onClick={() => onSetSelection([])}
-                className="rounded-full px-3.5 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100"
+                className="rounded-full px-3.5 py-1.5 text-sm font-medium text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40"
               >
                 Clear
               </button>
@@ -321,18 +321,18 @@ export default function VaultTreeView({
 
                         <div className="flex items-center justify-end gap-2">
                           {row.isDir ? (
-                            <button type="button" onClick={() => openFolder(row.fullPath)} className="rounded-full px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50">
+                            <button type="button" onClick={() => openFolder(row.fullPath)} className="rounded-full px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40">
                               Open
                             </button>
                           ) : (
-                            <button type="button" onClick={() => onView(full)} className="rounded-full px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50">
+                            <button type="button" onClick={() => onView(full)} className="rounded-full px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40">
                               View
                             </button>
                           )}
-                          <button type="button" onClick={() => onExport(full)} className="rounded-full px-3 py-1.5 text-sm font-medium text-emerald-600 hover:bg-emerald-50">
+                          <button type="button" onClick={() => onExport(full)} className="rounded-full px-3 py-1.5 text-sm font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40">
                             Export
                           </button>
-                          <button type="button" onClick={() => onDelete(full)} className="rounded-full px-3 py-1.5 text-sm font-medium text-slate-400 hover:bg-rose-50 hover:text-rose-600">
+                          <button type="button" onClick={() => onDelete(full)} className="rounded-full px-3 py-1.5 text-sm font-medium text-slate-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400">
                             Delete
                           </button>
                         </div>
@@ -377,18 +377,18 @@ export default function VaultTreeView({
 
                       <div className="mt-3 flex items-center justify-center gap-2">
                         {row.isDir ? (
-                          <button type="button" onClick={() => openFolder(row.fullPath)} className="rounded-full px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50">
+                          <button type="button" onClick={() => openFolder(row.fullPath)} className="rounded-full px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40">
                             Open
                           </button>
                         ) : (
-                          <button type="button" onClick={() => onView(full)} className="rounded-full px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50">
+                          <button type="button" onClick={() => onView(full)} className="rounded-full px-3 py-1.5 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40">
                             View
                           </button>
                         )}
-                        <button type="button" onClick={() => onExport(full)} className="rounded-full px-3 py-1.5 text-sm font-medium text-emerald-600 hover:bg-emerald-50">
+                        <button type="button" onClick={() => onExport(full)} className="rounded-full px-3 py-1.5 text-sm font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40">
                           Export
                         </button>
-                        <button type="button" onClick={() => onDelete(full)} className="rounded-full px-3 py-1.5 text-sm font-medium text-slate-400 hover:bg-rose-50 hover:text-rose-600">
+                        <button type="button" onClick={() => onDelete(full)} className="rounded-full px-3 py-1.5 text-sm font-medium text-slate-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400">
                           Delete
                         </button>
                       </div>

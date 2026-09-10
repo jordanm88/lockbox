@@ -120,6 +120,7 @@ pub fn run() {
             commands::restore_vault_entry,
             commands::permanently_delete_trash_entry,
             commands::empty_trash,
+            commands::purge_expired_trash,
             commands::export_vault_file,
             commands::export_vault_folder,
             commands::export_vault_items,

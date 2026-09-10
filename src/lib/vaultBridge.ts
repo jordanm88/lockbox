@@ -219,6 +219,11 @@ export function emptyTrash(): Promise<void> {
   return invoke<void>("empty_trash");
 }
 
+/** Returns how many top-level trash items were purged. */
+export function purgeExpiredTrash(maxAgeSeconds: number): Promise<number> {
+  return invoke<number>("purge_expired_trash", { maxAgeSeconds });
+}
+
 /**
  * Prompts the user with a native save-file dialog, then decrypts the vault
  * file and writes the plaintext there. Returns false (without touching the

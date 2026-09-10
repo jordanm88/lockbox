@@ -106,7 +106,7 @@ export default function ThirdPartyApps() {
                     console.error("Failed to open PortableApps.com", err),
                   )
                 }
-                className="font-semibold text-blue-600 underline decoration-blue-200 underline-offset-2 hover:text-blue-700"
+                className="font-semibold text-blue-600 dark:text-blue-400 underline decoration-blue-200 underline-offset-2 hover:text-blue-700 dark:hover:text-blue-400"
               >
                 PortableApps.com
               </button>{" "}

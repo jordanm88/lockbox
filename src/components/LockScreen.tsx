@@ -104,7 +104,7 @@ export default function LockScreen({ onUnlock, notice }: LockScreenProps) {
         </div>
 
         {notice && (
-          <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm font-semibold text-amber-800">
+          <p className="mb-4 rounded-xl border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/40 px-3 py-3 text-sm font-semibold text-amber-800 dark:text-amber-300">
             {notice}
           </p>
         )}
@@ -167,7 +167,7 @@ export default function LockScreen({ onUnlock, notice }: LockScreenProps) {
             )}
 
             {error && (
-              <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-3 text-sm font-semibold text-red-700">
+              <p className="mt-4 rounded-xl border border-red-200 dark:border-red-800/60 bg-red-50 dark:bg-red-950/40 px-3 py-3 text-sm font-semibold text-red-700 dark:text-red-400">
                 {error}
               </p>
             )}

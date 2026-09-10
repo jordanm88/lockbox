@@ -11,7 +11,7 @@ import ConfirmDialog from "./components/ConfirmDialog";
 import UploadToast from "./components/UploadToast";
 import CloudSyncToast from "./components/CloudSyncToast";
 import WhatsNewDialog from "./components/WhatsNewDialog";
-import { lockVault, onVaultForceLocked, unlockVault } from "./lib/vaultBridge";
+import { lockVault, onVaultForceLocked, purgeExpiredTrash, unlockVault } from "./lib/vaultBridge";
 import {
   CloudAction,
   CloudRemoteConfig,
@@ -37,7 +37,15 @@ import {
 } from "./lib/updateBridge";
 import { FileWithPath, runUpload, UploadProgressState } from "./lib/uploadManager";
 import { getErrorMessage } from "./lib/errors";
-import { AUTO_LOCK_MINUTES, AUTO_LOCK_OPTIONS, AutoLockOption, TabId } from "./types";
+import {
+  AUTO_LOCK_MINUTES,
+  AUTO_LOCK_OPTIONS,
+  AutoLockOption,
+  TabId,
+  TRASH_RETENTION_DAYS,
+  TRASH_RETENTION_OPTIONS,
+  TrashRetentionOption,
+} from "./types";
 import pkg from "../package.json";
 
 const LAST_SEEN_RELEASE_KEY = "lastSeenReleaseVersion";
@@ -74,6 +82,16 @@ function readStoredAutoLockOption(): AutoLockOption {
     }
   } catch {}
   return "5 minutes";
+}
+
+function readStoredTrashRetentionOption(): TrashRetentionOption {
+  try {
+    const stored = localStorage.getItem("trashRetentionOption");
+    if (stored && (TRASH_RETENTION_OPTIONS as readonly string[]).includes(stored)) {
+      return stored as TrashRetentionOption;
+    }
+  } catch {}
+  return "30 days";
 }
 
 export default function App() {
@@ -118,6 +136,17 @@ export default function App() {
     setAutoLockOptionState(next);
     try {
       localStorage.setItem("autoLockOption", next);
+    } catch {}
+  }
+
+  const [trashRetentionOption, setTrashRetentionOptionState] = useState<TrashRetentionOption>(
+    readStoredTrashRetentionOption,
+  );
+
+  function setTrashRetentionOption(next: TrashRetentionOption) {
+    setTrashRetentionOptionState(next);
+    try {
+      localStorage.setItem("trashRetentionOption", next);
     } catch {}
   }
 
@@ -242,6 +271,16 @@ export default function App() {
       setUnlocked(false);
     }
   }
+
+  // Runs once per unlock (and again immediately if the retention setting
+  // changes while already unlocked) rather than on a background timer —
+  // there's no persistent process to run one in between app launches anyway.
+  useEffect(() => {
+    if (!unlocked) return;
+    const days = TRASH_RETENTION_DAYS[trashRetentionOption];
+    if (days === null) return;
+    purgeExpiredTrash(days * 86_400).catch((err) => console.error("Failed to purge expired trash", err));
+  }, [unlocked, trashRetentionOption]);
 
   // Lives here (not inside CloudSync) specifically so it keeps running no
   // matter which tab is active — CloudSync unmounts when you navigate away
@@ -587,6 +626,8 @@ export default function App() {
               onLock={handleLock}
               autoLockOption={autoLockOption}
               onChangeAutoLockOption={setAutoLockOption}
+              trashRetentionOption={trashRetentionOption}
+              onChangeTrashRetentionOption={setTrashRetentionOption}
               autoUpdateEnabled={autoUpdateEnabled}
               onChangeAutoUpdateEnabled={setAutoUpdateEnabled}
               onCheckForUpdateNow={handleManualUpdateCheck}

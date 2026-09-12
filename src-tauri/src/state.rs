@@ -37,6 +37,11 @@ pub struct AppState {
     /// of the last scan, paired with the launcher path resolved then. See
     /// that function for why this exists and what it doesn't catch.
     pub third_party_scan_cache: Mutex<HashMap<String, (SystemTime, Option<String>)>>,
+    /// A freshly generated 2FA secret, staged here only until the user
+    /// confirms it with a code from their authenticator app (`totp::
+    /// confirm_totp_setup`) — nothing touches disk until then, so an
+    /// abandoned setup leaves no trace. Cleared on lock too (`lock_vault`).
+    pub pending_totp_secret: Mutex<Option<String>>,
 }
 
 /// Locks `mutex`, recovering from poisoning instead of propagating it.

@@ -1,3 +1,5 @@
+mod ai;
+mod ai_index;
 mod catalog;
 mod cloud_commands;
 mod cloud_config;
@@ -11,8 +13,10 @@ mod process_ext;
 mod rclone;
 mod state;
 mod store_commands;
+mod totp;
 mod usb_root;
 mod updates;
+mod vault_settings;
 
 use state::{lock_recover, AppState};
 use std::collections::{HashMap, HashSet};
@@ -88,6 +92,7 @@ pub fn run() {
             uploads: Mutex::new(HashMap::new()),
             downloads: Mutex::new(HashMap::new()),
             third_party_scan_cache: Mutex::new(HashMap::new()),
+            pending_totp_secret: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
             commands::unlock_vault,
@@ -136,6 +141,17 @@ pub fn run() {
             cloud_commands::test_cloud_connection,
             eject::eject_usb_drive,
             drive_encryption::check_drive_encryption,
+            ai::get_ai_config,
+            ai::set_ai_enabled,
+            ai::set_ai_api_key,
+            ai::clear_ai_api_key,
+            ai::rebuild_ai_index,
+            ai::ai_chat,
+            totp::get_totp_status,
+            totp::begin_totp_setup,
+            totp::confirm_totp_setup,
+            totp::cancel_totp_setup,
+            totp::disable_totp,
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|e| fatal_startup_error(&format!("Tauri failed to start: {e}")));

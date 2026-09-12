@@ -8,8 +8,14 @@ export interface VaultFileEntry {
   isDir: boolean;
 }
 
-export function unlockVault(passphrase: string): Promise<boolean> {
-  return invoke<boolean>("unlock_vault", { passphrase });
+export type UnlockOutcome =
+  | { status: "unlocked" }
+  | { status: "wrongPassphrase" }
+  | { status: "totpRequired" }
+  | { status: "wrongTotp" };
+
+export function unlockVault(passphrase: string, totpCode?: string): Promise<UnlockOutcome> {
+  return invoke<UnlockOutcome>("unlock_vault", { passphrase, totpCode: totpCode ?? null });
 }
 
 export function vaultExists(): Promise<boolean> {
@@ -272,4 +278,83 @@ export interface EjectResult {
  */
 export function ejectUsbDrive(): Promise<EjectResult> {
   return invoke<EjectResult>("eject_usb_drive");
+}
+
+// --- AI assistant ------------------------------------------------------
+
+export interface AiConfig {
+  enabled: boolean;
+  provider: string;
+  hasApiKey: boolean;
+}
+
+export function getAiConfig(): Promise<AiConfig> {
+  return invoke<AiConfig>("get_ai_config");
+}
+
+export function setAiEnabled(enabled: boolean): Promise<void> {
+  return invoke<void>("set_ai_enabled", { enabled });
+}
+
+/** Validates the key against Anthropic before saving it — rejects with a
+ * clear message (bad key, rate limited, etc.) rather than silently saving
+ * something that will only fail on the first real question. */
+export function setAiApiKey(provider: string, apiKey: string): Promise<void> {
+  return invoke<void>("set_ai_api_key", { provider, apiKey });
+}
+
+export function clearAiApiKey(): Promise<void> {
+  return invoke<void>("clear_ai_api_key");
+}
+
+/** Returns how many vault files are now indexed (metadata-only ones included). */
+export function rebuildAiIndex(): Promise<number> {
+  return invoke<number>("rebuild_ai_index");
+}
+
+export interface AiChatTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
+/** Sends one question plus prior turns; the backend appends relevant vault
+ * file excerpts to the *new* message only (history is sent as plain text,
+ * not re-padded with file content on every turn). */
+export function aiChat(message: string, history: AiChatTurn[]): Promise<string> {
+  return invoke<string>("ai_chat", { message, history });
+}
+
+// --- Two-factor authentication (TOTP) -----------------------------------
+
+export interface TotpStatus {
+  enabled: boolean;
+}
+
+export function getTotpStatus(): Promise<TotpStatus> {
+  return invoke<TotpStatus>("get_totp_status");
+}
+
+export interface TotpSetup {
+  secret: string;
+  otpauthUri: string;
+}
+
+/** Generates and stages a new secret — nothing is persisted until
+ * `confirmTotpSetup` verifies a real code against it. */
+export function beginTotpSetup(): Promise<TotpSetup> {
+  return invoke<TotpSetup>("begin_totp_setup");
+}
+
+/** Returns false (not an error) for a wrong/expired code, so the caller can
+ * show an inline "that code didn't match" message and let the user retry. */
+export function confirmTotpSetup(code: string): Promise<boolean> {
+  return invoke<boolean>("confirm_totp_setup", { code });
+}
+
+export function cancelTotpSetup(): Promise<void> {
+  return invoke<void>("cancel_totp_setup");
+}
+
+export function disableTotp(): Promise<void> {
+  return invoke<void>("disable_totp");
 }

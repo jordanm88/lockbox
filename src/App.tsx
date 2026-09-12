@@ -11,7 +11,16 @@ import ConfirmDialog from "./components/ConfirmDialog";
 import UploadToast from "./components/UploadToast";
 import CloudSyncToast from "./components/CloudSyncToast";
 import WhatsNewDialog from "./components/WhatsNewDialog";
-import { lockVault, onVaultForceLocked, purgeExpiredTrash, unlockVault } from "./lib/vaultBridge";
+import {
+  AiConfig,
+  getAiConfig,
+  lockVault,
+  onVaultForceLocked,
+  purgeExpiredTrash,
+  UnlockOutcome,
+  unlockVault,
+} from "./lib/vaultBridge";
+import ChatPopup from "./components/ChatPopup";
 import {
   CloudAction,
   CloudRemoteConfig,
@@ -253,13 +262,13 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [cloudLastAction, cloudSyncStatus, cloudRestoreStatus]);
 
-  async function handleUnlock(passphrase: string): Promise<boolean> {
-    const ok = await unlockVault(passphrase);
-    if (ok) {
+  async function handleUnlock(passphrase: string, totpCode?: string): Promise<UnlockOutcome> {
+    const outcome = await unlockVault(passphrase, totpCode);
+    if (outcome.status === "unlocked") {
       setUnlocked(true);
       setLockNotice(null);
     }
-    return ok;
+    return outcome;
   }
 
   async function handleLock() {
@@ -281,6 +290,30 @@ export default function App() {
     if (days === null) return;
     purgeExpiredTrash(days * 86_400).catch((err) => console.error("Failed to purge expired trash", err));
   }, [unlocked, trashRetentionOption]);
+
+  // Drives whether the chat popup (below) is mounted at all. Settings calls
+  // `refreshAiConfig` itself right after changing the enabled flag or the
+  // API key, so the popup appears/disappears immediately rather than only
+  // on the next unlock.
+  const [aiConfig, setAiConfig] = useState<AiConfig | null>(null);
+
+  async function refreshAiConfig() {
+    if (!unlocked) return;
+    try {
+      setAiConfig(await getAiConfig());
+    } catch (err) {
+      console.error("Failed to load AI assistant config", err);
+      setAiConfig(null);
+    }
+  }
+
+  useEffect(() => {
+    if (!unlocked) {
+      setAiConfig(null);
+      return;
+    }
+    refreshAiConfig();
+  }, [unlocked]);
 
   // Lives here (not inside CloudSync) specifically so it keeps running no
   // matter which tab is active — CloudSync unmounts when you navigate away
@@ -634,6 +667,7 @@ export default function App() {
               checkingForUpdate={manualChecking}
               updateCheckStatus={manualCheckStatus}
               lastUpdateCheckedAt={lastCheckedAt}
+              onAiConfigChanged={refreshAiConfig}
             />
           )}
         </div>
@@ -669,6 +703,8 @@ export default function App() {
       )}
 
       <WhatsNewDialog release={whatsNew} onDismiss={dismissWhatsNew} />
+
+      {unlocked && aiConfig?.enabled && aiConfig.hasApiKey && <ChatPopup />}
     </div>
   );
 }

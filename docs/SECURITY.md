@@ -35,6 +35,13 @@ current implementation (`src-tauri/src/crypto.rs`), not a marketing claim.
    state) for as long as the vault is unlocked, and is explicitly zeroed out
    in memory (via the `zeroize` crate) the moment it's dropped — on lock, on
    app exit, or if a command panics. It is never written to disk anywhere.
+4. If two-factor authentication (Settings → Two-Factor Authentication) is
+   turned on, unlocking additionally requires a 6-digit code from an
+   authenticator app before the derived key is committed to that in-memory
+   state — a correct passphrase alone stops one step short of unlocking.
+   The TOTP secret itself is encrypted the same way everything else in this
+   document is (see below), so it's exactly as protected as the vault
+   contents it guards.
 
 ## How files are encrypted
 
@@ -125,6 +132,36 @@ remember to verify by hand — but it can only detect BitLocker itself; it has
 no way to detect whether a VeraCrypt container is in use instead, since a
 mounted VeraCrypt volume looks like an ordinary drive from Windows' point of
 view.
+
+## The AI assistant (opt-in, off by default)
+
+Settings → AI Assistant lets you add your own Anthropic API key so a chat
+popup can answer questions about this vault's files. This is the one
+feature in Lockbox that sends anything off the device, so it's worth being
+explicit about exactly what and when:
+
+- Nothing is sent until you both turn the feature on *and* ask it a
+  question — there is no background indexing traffic, telemetry, or
+  check-in of any kind.
+- Each question you ask sends that question, plus the content of whichever
+  vault files best match it (plain-text files and PDFs only — see below),
+  to `https://api.anthropic.com` over HTTPS, using the API key you supplied.
+  That request is between this app and Anthropic directly; Lockbox has no
+  server of its own in between.
+- Only plain-text-like files (txt, md, json, csv, code, etc.) and PDFs are
+  ever decrypted for this purpose and have their content included. Every
+  other file type — images, video, archives, Office documents — is
+  metadata-only: the assistant can be told a file exists (name, size) but
+  its contents are never read or sent.
+- The API key and a small on-disk index (`Vault/.lockbox/settings.enc` and
+  `Vault/.lockbox/ai_index.enc`) are encrypted with the same vault key as
+  everything else, so both are exactly as protected as your files — neither
+  is readable without unlocking the vault first, and both live on the same
+  drive as the vault itself (not on the host computer), so switching USB
+  drives switches which cache applies too.
+- Chat history is kept in memory only for the current session and is never
+  written to disk; it disappears the moment you lock the vault or close the
+  chat popup.
 
 ## Where to look if you want to verify any of this yourself
 

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import PageHeader from "../components/PageHeader";
+import AiAssistantSettings from "../components/AiAssistantSettings";
+import TwoFactorSettings from "../components/TwoFactorSettings";
 import { AUTO_LOCK_OPTIONS, AutoLockOption, TRASH_RETENTION_OPTIONS, TrashRetentionOption } from "../types";
 import { checkDriveEncryption, DriveEncryptionStatus } from "../lib/securityBridge";
 import {
@@ -32,6 +34,7 @@ interface SettingsProps {
   checkingForUpdate: boolean;
   updateCheckStatus: string;
   lastUpdateCheckedAt: string | null;
+  onAiConfigChanged: () => void;
 }
 
 export default function Settings({
@@ -46,6 +49,7 @@ export default function Settings({
   checkingForUpdate,
   updateCheckStatus,
   lastUpdateCheckedAt,
+  onAiConfigChanged,
 }: SettingsProps) {
   const [currentPass, setCurrentPass] = useState("");
   const [newPass, setNewPass] = useState("");
@@ -296,6 +300,9 @@ export default function Settings({
           {verifying ? "Verifying…" : "Verify Vault"}
         </button>
       </div>
+
+      <TwoFactorSettings />
+      <AiAssistantSettings onConfigChanged={onAiConfigChanged} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="neo-panel bg-paper p-6">

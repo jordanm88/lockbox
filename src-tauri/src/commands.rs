@@ -1,5 +1,5 @@
 use crate::state::{lock_recover, AppState};
-use crate::{crypto, usb_root};
+use crate::{crypto, totp, usb_root, vault_settings};
 use rand::{rngs::OsRng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -84,30 +84,51 @@ fn random_session_id() -> String {
     hex::encode(bytes)
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase", tag = "status")]
+pub enum UnlockOutcome {
+    Unlocked,
+    WrongPassphrase,
+    /// The passphrase was correct, but this vault has 2FA enabled and no
+    /// `totp_code` was given — `state.vault_key` is deliberately *not* set
+    /// yet. Call again with the same passphrase plus the code.
+    TotpRequired,
+    WrongTotp,
+}
+
 // `async` dispatches this off the main thread instead of on it (see the
 // longer explanation on `store_commands::install_app`) — Argon2id key
 // derivation is deliberately CPU-expensive, which otherwise froze the whole
 // window on every single unlock attempt.
 #[tauri::command(async)]
-pub fn unlock_vault(state: State<AppState>, passphrase: String) -> Result<bool, String> {
+pub fn unlock_vault(state: State<AppState>, passphrase: String, totp_code: Option<String>) -> Result<UnlockOutcome, String> {
     let vault_dir = usb_root::vault_dir(&state.root);
     let outcome = crypto::unlock(&vault_dir, &passphrase)?;
 
-    let mut guard = lock_recover(&state.vault_key);
+    let Some(key) = outcome else {
+        return Ok(UnlockOutcome::WrongPassphrase);
+    };
 
-    match outcome {
-        Some(key) => {
-            *guard = Some(key);
-            Ok(true)
+    let settings = vault_settings::load(&vault_dir, &key)?;
+    if settings.totp_enabled {
+        let secret = settings.totp_secret.as_deref().unwrap_or_default();
+        match totp_code {
+            None => return Ok(UnlockOutcome::TotpRequired),
+            Some(code) if totp::verify(secret, code.trim()) => {}
+            Some(_) => return Ok(UnlockOutcome::WrongTotp),
         }
-        None => Ok(false),
     }
+
+    *lock_recover(&state.vault_key) = Some(key);
+    Ok(UnlockOutcome::Unlocked)
 }
 
 #[tauri::command]
 pub fn lock_vault(state: State<AppState>) -> Result<(), String> {
     let mut guard = lock_recover(&state.vault_key);
     *guard = None;
+    drop(guard);
+    *lock_recover(&state.pending_totp_secret) = None;
     Ok(())
 }
 
@@ -936,9 +957,11 @@ fn normalize_relative_path(path: &str) -> Result<String, String> {
     Ok(components.join("/"))
 }
 
-/// Shared by the chunked download path below. Loads and fully decrypts one
-/// vault entry, returning plaintext bytes in memory.
-fn read_decrypted_file(
+/// Shared by the chunked download path below (and by `ai_index`, which
+/// decrypts each active file once to build the assistant's search cache).
+/// Loads and fully decrypts one vault entry, returning plaintext bytes in
+/// memory.
+pub(crate) fn read_decrypted_file(
     vault_dir: &Path,
     key: &crypto::VaultKey,
     relative_path: &str,
@@ -957,6 +980,32 @@ fn read_decrypted_file(
     let sealed = fs::read(data_dir(vault_dir).join(blob_name))
         .map_err(|e| format!("failed to read encrypted file: {e}"))?;
     crypto::decrypt_bytes(key, &sealed)
+}
+
+/// One active (not trashed, not a directory) vault file, as seen by
+/// `ai_index` — just enough to detect content changes (`blob_name`, which a
+/// re-upload of the same path replaces) without exposing the rest of
+/// `VaultIndexEntry`'s private fields outside this module.
+pub(crate) struct AiIndexableFile {
+    pub path: String,
+    pub blob_name: String,
+    pub size: u64,
+}
+
+pub(crate) fn list_active_files_for_ai(vault_dir: &Path, key: &crypto::VaultKey) -> Result<Vec<AiIndexableFile>, String> {
+    let index = load_or_upgrade_index(vault_dir, key)?;
+    Ok(index
+        .entries
+        .iter()
+        .filter(|entry| !entry.is_dir)
+        .filter_map(|entry| {
+            entry.blob_name.clone().map(|blob_name| AiIndexableFile {
+                path: entry.original_path.clone(),
+                blob_name,
+                size: entry.size.unwrap_or(0),
+            })
+        })
+        .collect())
 }
 
 // --- Chunked download -------------------------------------------------------

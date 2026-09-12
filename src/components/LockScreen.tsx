@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { vaultExists } from "../lib/vaultBridge";
+import { UnlockOutcome, vaultExists } from "../lib/vaultBridge";
 import { getErrorMessage } from "../lib/errors";
 import pkg from "../../package.json";
 
@@ -12,7 +12,7 @@ const CURRENT_YEAR = new Date().getFullYear();
 const MIN_PASSPHRASE_LENGTH = 12;
 
 interface LockScreenProps {
-  onUnlock: (passphrase: string) => Promise<boolean>;
+  onUnlock: (passphrase: string, totpCode?: string) => Promise<UnlockOutcome>;
   /** Shown once, e.g. "Locked automatically because the vault drive was removed." */
   notice?: string | null;
 }
@@ -25,6 +25,11 @@ export default function LockScreen({ onUnlock, notice }: LockScreenProps) {
   const [shake, setShake] = useState(false);
   const [busy, setBusy] = useState(false);
   const [freshInstall, setFreshInstall] = useState<boolean | null>(null);
+  // Set once the passphrase step succeeds but the vault also has 2FA
+  // enabled — the passphrase itself is kept in state (not re-asked) so the
+  // second submit can resend it alongside the code.
+  const [needsTotp, setNeedsTotp] = useState(false);
+  const [totpCode, setTotpCode] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -65,9 +70,22 @@ export default function LockScreen({ onUnlock, notice }: LockScreenProps) {
     }
 
     try {
-      const ok = await onUnlock(passphrase);
-      if (!ok) {
-        triggerError("Incorrect passphrase. Try again.");
+      const outcome = await onUnlock(passphrase, needsTotp ? totpCode : undefined);
+      switch (outcome.status) {
+        case "unlocked":
+          break;
+        case "wrongPassphrase":
+          setNeedsTotp(false);
+          setTotpCode("");
+          triggerError("Incorrect passphrase. Try again.");
+          break;
+        case "totpRequired":
+          setNeedsTotp(true);
+          break;
+        case "wrongTotp":
+          setTotpCode("");
+          triggerError("That code didn't match. Try again.");
+          break;
       }
     } catch (err) {
       triggerError(getErrorMessage(err, "Unable to reach the vault backend."));
@@ -77,11 +95,13 @@ export default function LockScreen({ onUnlock, notice }: LockScreenProps) {
   }
 
   const isLoading = freshInstall === null;
-  const title = freshInstall ? "Create your master passphrase" : "Enter your master passphrase";
-  const subtitle = freshInstall
-    ? "This is the first time Lockbox has run on this drive. Create a new master passphrase to protect your vault."
-    : "Use the master passphrase you created earlier to unlock your vault.";
-  const buttonText = freshInstall ? "Create Master Passphrase" : "Unlock Vault";
+  const title = needsTotp ? "Enter your 2FA code" : freshInstall ? "Create your master passphrase" : "Enter your master passphrase";
+  const subtitle = needsTotp
+    ? "This vault has two-factor authentication enabled. Enter the 6-digit code from your authenticator app."
+    : freshInstall
+      ? "This is the first time Lockbox has run on this drive. Create a new master passphrase to protect your vault."
+      : "Use the master passphrase you created earlier to unlock your vault.";
+  const buttonText = needsTotp ? "Verify Code" : freshInstall ? "Create Master Passphrase" : "Unlock Vault";
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-slate-950/70 p-4 backdrop-blur-sm">
@@ -113,6 +133,52 @@ export default function LockScreen({ onUnlock, notice }: LockScreenProps) {
           <div className="neo-card px-4 py-5 text-center font-semibold text-ink">
             Checking vault status…
           </div>
+        ) : needsTotp ? (
+          <>
+            <label htmlFor="totp-code" className="mb-2 block text-sm font-semibold text-slate-700">
+              Authenticator Code
+            </label>
+            <input
+              id="totp-code"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              autoFocus
+              maxLength={6}
+              value={totpCode}
+              onChange={(event) => {
+                setTotpCode(event.target.value.replace(/\D/g, ""));
+                setError(null);
+              }}
+              placeholder="123456"
+              className="neo-input w-full px-4 py-3 text-center text-2xl tracking-[0.5em]"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setNeedsTotp(false);
+                setTotpCode("");
+                setError(null);
+              }}
+              className="mt-3 text-xs font-semibold text-slate-500 hover:text-slate-700"
+            >
+              ← Back to passphrase
+            </button>
+
+            {error && (
+              <p className="mt-4 rounded-xl border border-red-200 dark:border-red-800/60 bg-red-50 dark:bg-red-950/40 px-3 py-3 text-sm font-semibold text-red-700 dark:text-red-400">
+                {error}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={totpCode.length !== 6 || busy}
+              className="neo-btn mt-6 w-full bg-neo-blue py-3 text-lg text-white"
+            >
+              {busy ? "Verifying…" : buttonText}
+            </button>
+          </>
         ) : (
           <>
             <label htmlFor="passphrase" className="mb-2 block text-sm font-semibold text-slate-700">

@@ -94,11 +94,18 @@ fn extract_content(path: &str, plaintext: &[u8]) -> Option<String> {
         return Some(truncate_chars(text, MAX_CONTENT_CHARS));
     }
     if ext == "pdf" {
-        return match pdf_extract::extract_text_from_mem(plaintext) {
-            Ok(text) => Some(truncate_chars(text, MAX_CONTENT_CHARS)),
-            // A PDF that fails to parse (encrypted, scanned/image-only, malformed)
-            // just falls back to metadata-only rather than failing the whole index.
-            Err(_) => None,
+        // `pdf_extract` panics (rather than returning `Err`) on some
+        // malformed/unusual real-world PDFs — bad xref tables, unexpected
+        // font structures, etc. `catch_unwind` stops one bad PDF from
+        // taking down the whole app; this only works because the release
+        // profile uses `panic = "unwind"` (see Cargo.toml).
+        let result = std::panic::catch_unwind(|| pdf_extract::extract_text_from_mem(plaintext));
+        return match result {
+            Ok(Ok(text)) => Some(truncate_chars(text, MAX_CONTENT_CHARS)),
+            // Either a clean parse failure (encrypted, scanned/image-only,
+            // malformed) or a caught panic — both just fall back to
+            // metadata-only rather than failing the whole index.
+            Ok(Err(_)) | Err(_) => None,
         };
     }
     None

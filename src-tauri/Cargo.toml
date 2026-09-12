@@ -1,6 +1,6 @@
 [package]
 name = "lockbox"
-version = "0.2.24"
+version = "0.2.25"
 description = "Lockbox — portable encrypted USB vault"
 edition = "2021"
 
@@ -47,8 +47,16 @@ rfd = { version = "0.15", default-features = false, features = ["gtk3"] }
 # every vault operation runs ChaCha20Poly1305 + zip/tar extraction for app
 # installs — all CPU-bound work that a size-optimized build measurably
 # slows down for no benefit here.
+#
+# panic = "unwind" (not "abort"): the AI assistant's index-rebuild step
+# decrypts and parses arbitrary user files — including PDFs via the
+# `pdf-extract` crate, whose parser is known to panic (not just return an
+# `Err`) on malformed real-world PDFs — and `std::panic::catch_unwind`
+# around that call (see `ai_index::extract_content`) only works if panics
+# actually unwind. Under "abort", any single bad file would take down the
+# entire app instead of just failing to index that one file.
 [profile.release]
-panic = "abort"
+panic = "unwind"
 codegen-units = 1
 lto = true
 opt-level = 3

@@ -34,7 +34,7 @@ export default function UploadToast({ progress, onDismiss }: UploadToastProps) {
   const barColor = progress.status === "error" ? "bg-red-500" : progress.status === "done" ? "bg-emerald-500" : "bg-blue-500";
 
   return (
-    <div className="fixed bottom-6 right-6 z-40 w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+    <div className="w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
       <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3">
         <span className="text-lg">{icon}</span>
         <p className="flex-1 truncate text-sm font-semibold text-ink">{title}</p>

@@ -315,6 +315,18 @@ export default function App() {
     refreshAiConfig();
   }, [unlocked]);
 
+  // Set when a "source" link in the AI chat popup is clicked — switches to
+  // the Vault tab and drops the file's name into its search box. Vault.tsx
+  // consumes this via its `externalSearchQuery` prop and immediately clears
+  // it back here via `onExternalSearchApplied`.
+  const [pendingVaultSearch, setPendingVaultSearch] = useState<string | null>(null);
+
+  function openFileFromChat(relativePath: string) {
+    const leafName = relativePath.includes("/") ? relativePath.slice(relativePath.lastIndexOf("/") + 1) : relativePath;
+    setActiveTab("vault");
+    setPendingVaultSearch(leafName);
+  }
+
   // Lives here (not inside CloudSync) specifically so it keeps running no
   // matter which tab is active — CloudSync unmounts when you navigate away
   // from it, but App never does while the vault is unlocked.
@@ -629,7 +641,14 @@ export default function App() {
       <Sidebar activeTab={activeTab} onSelectTab={setActiveTab} onLock={handleLock} />
       <main className="flex-1 overflow-y-auto p-6 lg:p-8">
         <div className="mx-auto w-full max-w-7xl">
-          {activeTab === "vault" && <Vault uploading={uploading} onStartUpload={startUpload} />}
+          {activeTab === "vault" && (
+            <Vault
+              uploading={uploading}
+              onStartUpload={startUpload}
+              externalSearchQuery={pendingVaultSearch}
+              onExternalSearchApplied={() => setPendingVaultSearch(null)}
+            />
+          )}
           {activeTab === "appstore" && <AppStore />}
           {activeTab === "thirdpartyapps" && <ThirdPartyApps />}
           {activeTab === "cloudsync" && (
@@ -689,8 +708,6 @@ export default function App() {
         onCancel={handleUpdateLater}
       />
 
-      <UploadToast progress={uploadProgress} onDismiss={() => setUploadProgress(null)} />
-
       {!cloudToastDismissed && (
         <CloudSyncToast
           lastAction={cloudLastAction}
@@ -704,7 +721,14 @@ export default function App() {
 
       <WhatsNewDialog release={whatsNew} onDismiss={dismissWhatsNew} />
 
-      {unlocked && aiConfig?.enabled && aiConfig.hasApiKey && <ChatPopup />}
+      {/* Everything bottom-right shares one stacking container (rather than
+          each independently `fixed bottom-6 right-6`) so the upload toast
+          and the chat popup/FAB never render on top of each other — whichever
+          is present just stacks above the one anchored lowest. */}
+      <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-3">
+        <UploadToast progress={uploadProgress} onDismiss={() => setUploadProgress(null)} />
+        {unlocked && aiConfig?.enabled && aiConfig.hasApiKey && <ChatPopup onOpenFile={openFileFromChat} />}
+      </div>
     </div>
   );
 }

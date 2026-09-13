@@ -1,6 +1,6 @@
 [package]
 name = "lockbox"
-version = "0.2.25"
+version = "0.2.26"
 description = "Lockbox — portable encrypted USB vault"
 edition = "2021"
 

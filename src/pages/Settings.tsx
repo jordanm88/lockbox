@@ -378,7 +378,7 @@ export default function Settings({
         <div className="neo-panel bg-paper p-6">
           <h3 className="mb-4 text-xl font-semibold text-ink">Lock Options</h3>
           <span className="mb-2 block text-sm font-semibold text-slate-700">Auto-Lock After Inactivity</span>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             {AUTO_LOCK_OPTIONS.map((option) => (
               <button
                 key={option}

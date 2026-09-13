@@ -15,14 +15,29 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "settings", label: "Settings", icon: "⚙️" },
 ];
 
-export const AUTO_LOCK_OPTIONS = ["1 minute", "5 minutes", "15 minutes", "Never"] as const;
+export const AUTO_LOCK_OPTIONS = [
+  "30 seconds",
+  "1 minute",
+  "2 minutes",
+  "5 minutes",
+  "10 minutes",
+  "15 minutes",
+  "30 minutes",
+  "1 hour",
+  "Never",
+] as const;
 export type AutoLockOption = (typeof AUTO_LOCK_OPTIONS)[number];
 
 /** Minutes of inactivity before auto-lock fires; `null` means disabled. */
 export const AUTO_LOCK_MINUTES: Record<AutoLockOption, number | null> = {
+  "30 seconds": 0.5,
   "1 minute": 1,
+  "2 minutes": 2,
   "5 minutes": 5,
+  "10 minutes": 10,
   "15 minutes": 15,
+  "30 minutes": 30,
+  "1 hour": 60,
   Never: null,
 };
 

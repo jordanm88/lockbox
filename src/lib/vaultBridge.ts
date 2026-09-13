@@ -317,11 +317,23 @@ export interface AiChatTurn {
   content: string;
 }
 
+export interface ChatSource {
+  path: string;
+  /** False for a file the search matched by name only — its content was
+   * never decrypted or sent, so the assistant's answer can't have drawn on it. */
+  hasContent: boolean;
+}
+
+export interface ChatResponse {
+  answer: string;
+  sources: ChatSource[];
+}
+
 /** Sends one question plus prior turns; the backend appends relevant vault
  * file excerpts to the *new* message only (history is sent as plain text,
  * not re-padded with file content on every turn). */
-export function aiChat(message: string, history: AiChatTurn[]): Promise<string> {
-  return invoke<string>("ai_chat", { message, history });
+export function aiChat(message: string, history: AiChatTurn[]): Promise<ChatResponse> {
+  return invoke<ChatResponse>("ai_chat", { message, history });
 }
 
 // --- Two-factor authentication (TOTP) -----------------------------------

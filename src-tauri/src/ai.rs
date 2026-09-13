@@ -27,16 +27,43 @@ const MODEL_ID: &str = "claude-haiku-4-5";
 /// vault size.
 const MAX_CONTEXT_FILES: usize = 6;
 
-const SYSTEM_PROMPT: &str = "You are Lockbox's vault assistant. Answer the user's question using ONLY the file \
-excerpts provided below the question — never invent details that aren't there. If the answer isn't in the \
-provided excerpts, say so plainly instead of guessing. Some mentioned files may be listed as \"metadata only\" \
-(their content wasn't provided, only their name/size) — you may confirm such a file exists, but must not claim \
-to know its contents. Keep answers concise.";
+// No `tools` field is ever sent on the request built in `call_anthropic` —
+// not omitted by accident, deliberately never added. Web search and web
+// fetch are opt-in server-side tools on the Messages API that only ever
+// activate when explicitly declared in `tools`; leaving that out entirely
+// makes it structurally impossible for this feature to reach the open
+// internet for anything beyond the one fixed API call itself, regardless of
+// what the system prompt below says or what a question asks for.
+const SYSTEM_PROMPT: &str = "You are Lockbox's vault assistant. You have no internet access and no tools of any \
+kind — you can see ONLY the file excerpts provided below the user's question, nothing else. Answer using ONLY \
+those excerpts; never invent details that aren't there, and never draw on general/world knowledge to fill gaps. \
+If the answer isn't in the provided excerpts, say so plainly instead of guessing. Some mentioned files may be \
+listed as \"metadata only\" (their content wasn't provided, only their name/size) — you may confirm such a file \
+exists, but must not claim to know its contents. Keep answers concise. You may use light Markdown (short \
+paragraphs, `-` bullet lists, `**bold**`, `code` spans) where it genuinely helps readability.";
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ChatTurn {
     pub role: String,
     pub content: String,
+}
+
+/// One file the search step matched for a question — sent back alongside
+/// the answer so the frontend can show a clickable reference to it, whether
+/// or not its content was actually included (a metadata-only match is still
+/// worth linking to).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatSource {
+    path: String,
+    has_content: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatResponse {
+    answer: String,
+    sources: Vec<ChatSource>,
 }
 
 #[derive(Serialize)]
@@ -124,7 +151,7 @@ pub fn rebuild_ai_index(state: State<AppState>) -> Result<usize, String> {
 /// that would otherwise freeze the window — see `store_commands::install_app`
 /// for why a plain `fn` would block the main thread here.
 #[tauri::command(async)]
-pub fn ai_chat(state: State<AppState>, message: String, history: Vec<ChatTurn>) -> Result<String, String> {
+pub fn ai_chat(state: State<AppState>, message: String, history: Vec<ChatTurn>) -> Result<ChatResponse, String> {
     let (vault_dir, api_key) = {
         let guard = lock_recover(&state.vault_key);
         let key = guard.as_ref().ok_or("vault is locked")?;
@@ -145,6 +172,11 @@ pub fn ai_chat(state: State<AppState>, message: String, history: Vec<ChatTurn>) 
     };
 
     let matches = ai_index::search(&index, &message, MAX_CONTEXT_FILES);
+
+    let sources: Vec<ChatSource> = matches
+        .iter()
+        .map(|entry| ChatSource { path: entry.path.clone(), has_content: entry.content.is_some() })
+        .collect();
 
     let mut context = String::new();
     if matches.is_empty() {
@@ -173,7 +205,8 @@ pub fn ai_chat(state: State<AppState>, message: String, history: Vec<ChatTurn>) 
     let mut turns: Vec<ChatTurn> = history.into_iter().filter(|t| t.role == "user" || t.role == "assistant").collect();
     turns.push(ChatTurn { role: "user".to_string(), content: user_content });
 
-    call_anthropic(&api_key, SYSTEM_PROMPT, &turns, 1024)
+    let answer = call_anthropic(&api_key, SYSTEM_PROMPT, &turns, 1024)?;
+    Ok(ChatResponse { answer, sources })
 }
 
 fn call_anthropic(api_key: &str, system: &str, turns: &[ChatTurn], max_tokens: u32) -> Result<String, String> {

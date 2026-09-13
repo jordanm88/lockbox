@@ -29,6 +29,13 @@ interface VaultProps {
   // App.tsx renders, even after navigating to a different tab.
   uploading: boolean;
   onStartUpload: (fileEntries: FileWithPath[], folderPaths?: string[]) => Promise<void>;
+  // Lets a source link in the AI chat popup (mounted at the App level, with
+  // no direct access to this page's own search box) jump here and land on
+  // the specific file it referenced. `onExternalSearchApplied` clears the
+  // pending value in App.tsx once consumed, so navigating away and back
+  // doesn't reapply a stale search.
+  externalSearchQuery?: string | null;
+  onExternalSearchApplied?: () => void;
 }
 
 type WebkitFileSystemEntry = {
@@ -73,7 +80,7 @@ interface CollectedEntries {
   folders: string[];
 }
 
-export default function Vault({ uploading, onStartUpload }: VaultProps) {
+export default function Vault({ uploading, onStartUpload, externalSearchQuery, onExternalSearchApplied }: VaultProps) {
   const [files, setFiles] = useState<VaultFileEntry[]>([]);
   const [loading, setLoading] = useState(true);
   // Distinct from the `uploading` prop: this covers delete/export/create-folder
@@ -122,6 +129,18 @@ export default function Vault({ uploading, onStartUpload }: VaultProps) {
   useEffect(() => {
     refresh();
   }, []);
+
+  // A source link clicked in the AI chat popup sets this from App.tsx —
+  // land on "All Files" (a matched file could be any type, and the
+  // Pictures/Videos grids would otherwise filter it straight back out) and
+  // reuse the same search box a manual search would, then clear the pending
+  // value so it doesn't reapply if the user navigates away and back.
+  useEffect(() => {
+    if (!externalSearchQuery) return;
+    setSectionView("files");
+    setSearchQuery(externalSearchQuery);
+    onExternalSearchApplied?.();
+  }, [externalSearchQuery]);
 
   // Whole-window drag detection, not just the toolbar — dropping a file
   // anywhere over the page shows the full-area "Drop to upload" overlay,
